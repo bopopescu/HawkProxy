@@ -1,0 +1,22 @@
+check process rpcServer 
+    with pidfile /var/run/rpcServer.pid
+    depends on mysqld, keystone 
+    group hawk
+    start program = "/sbin/start-stop-daemon --start --make-pidfile --pidfile /var/run/rpcServer.pid -b --exec /home/cloudflow/hawk/python_hawk/rpc/rpcServer.py  -- --pycharm=True  >/dev/null 2>&1"
+    stop program = "/bin/bash -c '/bin/kill `/bin/cat /var/run/rpcServer.pid`'"
+    if failed port 8000 5 cycles then restart
+
+check process rpcResync 
+    with pidfile /var/run/rpcResync.pid 
+    group hawk
+    depends on mysqld, keystone 
+    start program = "/sbin/start-stop-daemon --start --make-pidfile --pidfile /var/run/rpcResync.pid -b --exec /home/cloudflow/hawk/python_hawk/entity/rpcResync.py -- --pycharm=True  >/dev/null 2>&1"
+    stop program = "/bin/bash -c '/bin/kill `/bin/cat /var/run/rpcResync.pid`'"
+    
+check process rpcWebSocket 
+    with pidfile /var/run/rpcWebSocket.pid 
+    group hawk
+    depends on mysqld, keystone 
+    start program = "/sbin/start-stop-daemon --start --make-pidfile --pidfile /var/run/rpcWebSocket.pid -b --exec /home/cloudflow/hawk/python_hawk/web_app/rpcWebSocket.py  -- --pycharm=True  >/dev/null 2>&1"
+    stop program = "/bin/bash -c '/bin/kill `/bin/cat /var/run/rpcWebSocket.pid`'"
+    if failed port 443 5 cycles then restart

@@ -1,0 +1,8 @@
+
+check system localhost
+    if memory usage > 98% then exec "/usr/bin/monit restart all"
+
+check filesystem root-filesystem with path /
+  if space usage is greater than 80% for 15 cycles then exec "/usr/sbin/logrotate -f /etc/logrotate.d/cloudflow;monit reload"
+  if space usage is greater than 90% for 15 cycles then exec "/usr/sbin/logrotate -f /etc/logrotate.d/*;monit reload"
+  if inode usage > 90% then alert

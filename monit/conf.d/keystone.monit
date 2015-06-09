@@ -1,0 +1,5 @@
+check process keystone 
+	with pidfile /var/run/keystone.pid
+	depends on mysqld
+    start program = "/usr/bin/service keystone start"
+    stop program = "/usr/bin/service keystone stop"

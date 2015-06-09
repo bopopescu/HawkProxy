@@ -1,0 +1,16 @@
+
+
+#   Cloudflow management server configuaration parameters
+
+--cloudflow_connection=mysql://cloudflowadmin:cloud2674@0.0.0.0/CloudFlowPortal
+--log_directory=/home/hawk/cfd-local/log
+--pid_directory=/home/hawk/cfd-local/pids
+
+
+
+
+
+
+
+
+

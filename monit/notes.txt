@@ -1,0 +1,3 @@
+1  After installing monit, copy the monit config file "monitrc" file to /etc/monit 
+   and the config files from conf.d to /etc/monit/conf.d.
+2. Group hakw is defiend for all hawk services

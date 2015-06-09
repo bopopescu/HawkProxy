@@ -6,15 +6,23 @@ import pprint
 from urlparse import parse_qs
 from cgi import escape
 import sys
+import datetime
 
 import eventlet
 from eventlet.green import urllib2
 from eventlet import wsgi
 import requests
+import pytz
 
 import utils.gflags_collection
 import cryptC as crypt
+import utils.cloud_utils
 from utils.cloud_utils import CloudGlobalBase
+from entity.entity_functions import EntityFunctions
+import entity.entity_commands
+import entity.entity_manager as ent_man
+import rest.rest_api as rest
+import utils.cloud_utils
 
 UA = "http://cfd23.does-it.net:8231"
 AUTH_URL = "http://cfd23.does-it.net:8002/v3"
@@ -27,8 +35,6 @@ ch.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 log.addHandler(ch)
-
-import pytz, datetime
 
 local = pytz.timezone("America/Los_Angeles")
 naive = datetime.datetime.strptime("2001-2-3 10:11:12", "%Y-%m-%d %H:%M:%S")
@@ -546,7 +552,6 @@ def dict_keys_to_lower(dict):
 def create_interface(beg_serv_name, end_serv_name, interface_specs, vdc_id):
     # TODO check either beggining or end must be a switch?
     # TODO?!?!?!?!
-    from entity.entity_functions import EntityFunctions
 
     options = {}
     beggining_row = cloudDB.get_row_dict("tblEntities", {"Name": beg_serv_name, "ParentEntityId": vdc_id})
@@ -579,6 +584,7 @@ def create_interface(beg_serv_name, end_serv_name, interface_specs, vdc_id):
 
 
 def create_interfaces(ent_name, interfaces_array, vdc_id):
+    #TODO Handle interface params
     for interface in interfaces_array:
         beg_serv_name = ent_name
         end_serv_name = interface["subnet"]
@@ -603,36 +609,36 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
     except KeyError:
         descr = ""
 
-    if action == "create":
-        service_type = ""
-        if obj_type == "switch_network_service":
-            service_type = "networkSwitch"
-        elif obj_type == "nat_network_service":
-            service_type = "nat"
-        elif obj_type == "fws_network_service":
-            service_type = "firewall"
-        elif obj_type == "lbs_network_service":
-            service_type = "loadbalancer"
-        elif obj_type == "rts_network_service":
-            service_type = "router"
-        elif obj_type == "ipsecvpn_network_service":
-            service_type = "vpn"
-        elif obj_type == "nms_network_service":
-            service_type = "networkMonitor"
-        # elif obj_type == "volumes":
-        # elif obj_type == "security-groups":
-        # elif obj_type == "security-rules":
-        # elif obj_type == "acl-groups":
-        # elif obj_type == "acl-rules":
-        # elif obj_type == "load-balancer-groups":
-        # elif obj_type == "load-balancer-services":
-        # elif obj_type == "vpn-groups":
-        # elif obj_type == "ipsec-tunnels":
-        elif obj_type == "externalnetwork":
-            service_type = "externalNetwork"
-        elif obj_type == "compute_network_service":
-            service_type = "compute"
+    service_type = ""
+    if obj_type == "switch_network_service":
+        service_type = "networkSwitch"
+    elif obj_type == "nat_network_service":
+        service_type = "nat"
+    elif obj_type == "fws_network_service":
+        service_type = "firewall"
+    elif obj_type == "lbs_network_service":
+        service_type = "loadbalancer"
+    elif obj_type == "rts_network_service":
+        service_type = "router"
+    elif obj_type == "ipsecvpn_network_service":
+        service_type = "vpn"
+    elif obj_type == "nms_network_service":
+        service_type = "networkMonitor"
+    # elif obj_type == "volumes":
+    # elif obj_type == "security-groups":
+    # elif obj_type == "security-rules":
+    # elif obj_type == "acl-groups":
+    # elif obj_type == "acl-rules":
+    # elif obj_type == "load-balancer-groups":
+    # elif obj_type == "load-balancer-services":
+    # elif obj_type == "vpn-groups":
+    # elif obj_type == "ipsec-tunnels":
+    elif obj_type == "externalnetwork":
+        service_type = "externalNetwork"
+    elif obj_type == "compute_network_service":
+        service_type = "compute"
 
+    if action == "create":
         if len(service_type) > 0:
             options.update({"entitytype": obj_type, "name": name, "description": descr, "servicetype": service_type,
                             "parententityid": details["id"]})
@@ -652,39 +658,61 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
             except KeyError:
                 continue
 
-        if obj_type == "switch_network_service" or obj_type == "nat_network_service" or obj_type == "externalnetwork":
+        options.update({
+            "entitytype": obj_type,
+            "parententityid": details["id"]
+        })
+
+        if len(service_type) > 0: #network service
+            options.update({"servicetype": service_type})
             options.update({
                 "id": child_details["id"],
-                "vdc_status": "Ready",
-                "sortsequenceid": child_details["sortsequenceid"],
+                "name": name,
                 "uniqueid": child_details["uniqueid"],
-                "entitystatus": "Ready",
-                "parententityid": details["id"],
-                "defaultgateways": [{"name": "Default", "dbid": 0}],
+                "throughputsArray": [
+                    {
+                        "name": "100",
+                        "id": "100"
+                    },
+                    {
+                        "name": "200",
+                        "id": "200"
+                    },
+                    {
+                        "name": "500",
+                        "id": "500"
+                    },
+                    {
+                        "name": "1000",
+                        "id": "1000"
+                    },
+                    {
+                        "name": "2000",
+                        "id": "2000"
+                    }
+                ]
             })
-        if obj_type == "nat_network_service":
-            options.update({"servicetype": "nat",
-                            "entitytype": "nat", })
-            try:
-                options.update({"nat_pat_mode": data["pat_mode"]})
-            except KeyError:
-                pass
-        elif obj_type == "switch_network_service":
-            options.update({"servicetype": "networkSwitch",
-                            "entitytype": obj_type, })
 
         elif obj_type == "serverfarm":
-            options.update({
-                "parentstatus": "Ready",
-                "status": "Ready",
-                "user_data": "",
-                "entitytype": obj_type,
-                "parententityid": details["id"],
-                "volumes": [],
-                "tblcomputeclassesid": 0,
-                "attach_to": [],
-                "metadata": []
-            })
+
+            if "metadata" in data.viewkeys():
+                options.update({"metadata" : data["metadata"]})
+            if "ssh_keys" in data.viewkeys():
+                options.update({"ssh_keys" : data["ssh_keys"]})
+            if "dynamic_option" in data.viewkeys():
+                options.update({
+                    "scale_option": data["dynamic_option"],
+                    "min" : data["min"],
+                    "max" : data["max"],
+                    "initial" : data["initial"]
+                })
+                policies = ["bandwidth", "ram", "cpu"]
+                for one in policies:
+                    if one in data["dynamic_options"].viewkeys():
+                        options.update({
+                            str(one) + "_red": data["dynamic_options"][one][0],
+                            str(one) + "_green": data["dynamic_options"][one][1]
+                        })
         elif obj_type == "server":
             try:
                 libname = data["server_boot"]["boot_image"]["library_name"]
@@ -818,12 +846,26 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
     return options
 
 
+def create_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data):
+    options = generate_options(ent_type, vdc_uuid, formatted_post_data, parent_vdc_details, "create")
+    ent = EntityFunctions(db=cloudDB, dbid=0)
+    entity_res = ent._create(cloudDB, options)
+
+    update_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data)
+
+    if "interfaces" in formatted_post_data:
+        create_interfaces(formatted_post_data["name"], formatted_post_data["interfaces"], parent_vdc_details["id"])
+    return entity_res
+
+def update_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data):
+    ent = EntityFunctions(db=cloudDB, dbid=0)
+    ent._status(cloudDB, generate_options(ent_type, vdc_uuid, formatted_post_data, parent_vdc_details, "create"))
+    print ent.row
+    options = generate_options(ent_type, vdc_uuid, formatted_post_data, parent_vdc_details, "update", child_details=ent.row)
+    return ent._update(cloudDB, options)
+
 def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
     global RES_CODE
-    from entity.entity_functions import EntityFunctions
-    import entity.entity_manager
-    import rest.rest_api as rest
-    import utils.cloud_utils
 
     print "PERFORMING ACTION: " + reqm + " " + obj_uuid + " " + obj_type
     if reqm == "POST" or reqm == "PUT":
@@ -927,7 +969,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         print headers
         print spec_uri
 
-        child_table = entity.entity_manager.entities[obj_type].child_table
+        child_table = ent_man.entities[obj_type].child_table
         columns = cloudDB.execute_db("SHOW COLUMNS FROM %s" % child_table)
 
         if reqm == "POST" or reqm == "PUT":
@@ -959,24 +1001,12 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 pass
 
         if reqm == "POST":
-            if obj_type != "network_interface":
-                r = rest.post_rest(UA + spec_uri, data, headers)
-            else:
-                r = {"http_status_code": 200}
+            r = rest.post_rest(UA + spec_uri, data, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                # options = data
-                options = generate_options(obj_type, obj_uuid, data, details, "create")
-                # if details is not None:
-                #     options.update({"parententityid": details["id"]})
-                # options.update({"entitytype": obj_type})
-                entitya = EntityFunctions(db=cloudDB, dbid=0, slice_row=slice_row_lower)
-                entity_res = entitya._create(cloudDB, options)
-                entitya.update_all_service_uris(cloudDB, r, slice_url=UA)
-                options = generate_options(obj_type, obj_uuid, data, details, "update", child_details=entitya.row)
-                entitya._update(cloudDB, options)
-                if "interfaces" in data:
-                    create_interfaces(data["name"], data["interfaces"], details["id"])
+                entity_res = create_entity(obj_type, obj_uuid, details, data)
                 RES_CODE = "201 Created"
+                ent = EntityFunctions(db=cloudDB, dbid=0)
+                ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":  # TODO How to handle provisioining/deprovisioning?
             # if obj_type == "vdc":
             # provision here
@@ -990,7 +1020,6 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 # print options
                 # print entity._update(cloudDB, options, do_get=True)
                 entity_res = entity._update(cloudDB, options)  # TODO This does not update throughputs
-                import entity.entity_commands
 
                 entity.entity_commands.update_multiple(cloudDB, details["id"], options)
                 RES_CODE = "202 Accepted"
@@ -1057,11 +1086,9 @@ def special_process(action_type, split, reqm, acls, user_data, post_data):
 
 
 def get_dict_details(details):
-    import entity.entity_manager
-
     dicto = {}
     # if details["EntityType"] == "organization" or details["EntityType"] == "department":
-    row = cloudDB.get_row_dict(entity.entity_manager.entities[details["EntityType"]].child_table,
+    row = cloudDB.get_row_dict(ent_man.entities[details["EntityType"]].child_table,
                                {"tblEntities": details["id"]})
     print row
     dicto.update(row)
@@ -1453,8 +1480,6 @@ def serve(env, start_response):
         start_response(RES_CODE, defresponse_header)
         return oman.wrong_api_version()
 
-
-import utils.cloud_utils
 
 utils.cloud_utils.setup_flags_logs('hawk-rpc.log', flagfile='cloudflow_flags.conf', logdir=None, init_logger=True)
 wsgi.server(eventlet.listen(('', 8091)), serve)

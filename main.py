@@ -651,6 +651,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                     options.update({key: val})
             except KeyError:
                 continue
+
         if obj_type == "switch_network_service" or obj_type == "nat_network_service" or obj_type == "externalnetwork":
             options.update({
                 "id": child_details["id"],
@@ -671,11 +672,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
         elif obj_type == "switch_network_service":
             options.update({"servicetype": "networkSwitch",
                             "entitytype": obj_type, })
-        # elif obj_type == "firewalls":
-        # elif obj_type == "load-balancers":
-        # elif obj_type == "routers":
-        # elif obj_type == "vpns":
-        # elif obj_type == "monitors":
+
         elif obj_type == "serverfarm":
             options.update({
                 "parentstatus": "Ready",
@@ -735,6 +732,12 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                     }
                 ]
             })
+
+        # elif obj_type == "firewalls":
+        # elif obj_type == "load-balancers":
+        # elif obj_type == "routers":
+        # elif obj_type == "vpns":
+        # elif obj_type == "monitors":
         # elif obj_type == "containers":
         # elif obj_type == "volumes":
         # elif obj_type == "security-groups":
@@ -745,6 +748,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
         # elif obj_type == "load-balancer-services":
         # elif obj_type == "vpn-groups":
         # elif obj_type == "ipsec-tunnels":
+
         elif obj_type == "externalnetwork":
             options.update({"servicetype": "externalNetwork",
                             "entitytype": obj_type, })
@@ -967,10 +971,6 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 # options.update({"entitytype": obj_type})
                 entitya = EntityFunctions(db=cloudDB, dbid=0, slice_row=slice_row_lower)
                 entity_res = entitya._create(cloudDB, options)
-                print "SPECIAL ROW:"
-                print entitya._status(cloudDB)
-                print entitya.row
-                print entitya.dbid
                 entitya.update_all_service_uris(cloudDB, r, slice_url=UA)
                 options = generate_options(obj_type, obj_uuid, data, details, "update", child_details=entitya.row)
                 entitya._update(cloudDB, options)

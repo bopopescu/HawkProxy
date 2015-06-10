@@ -591,7 +591,7 @@ def create_interfaces(ent_name, interfaces_array, vdc_id):
         create_interface(beg_serv_name, end_serv_name, interface, vdc_id)
 
 
-def generate_options(obj_type, obj_uuid, data, details, action="create", child_details=None):  # parent details
+def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", child_details=None):  # parent details
     options = {}
 
     print action
@@ -641,10 +641,10 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
     if action == "create":
         if len(service_type) > 0:
             options.update({"entitytype": obj_type, "name": name, "description": descr, "servicetype": service_type,
-                            "parententityid": details["id"]})
+                            "parententityid": vdc_details["id"]})
         else:
             options.update(
-                {"name": name, "description": descr, "entitytype": obj_type, "parententityid": details["id"]})
+                {"name": name, "description": descr, "entitytype": obj_type, "parententityid": vdc_details["id"]})
 
     #-----------------------------------------------------UPDATE--------------------------------------
     elif action == "update" and child_details is not None:
@@ -661,7 +661,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
 
         options.update({
             "entitytype": obj_type,
-            "parententityid": details["id"]
+            "parententityid": vdc_details["id"]
         })
 
         if len(service_type) > 0: #network service TODO Maybe some of these take extra information?
@@ -749,7 +749,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                 if "boot_volume" in data["server_boot"].viewkeys():
                     if "volume_name" in data["server_boot"]["boot_volume"].viewkeys():
                         boot_volume_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "volume", "Name": data["server_boot"]["boot_volume"]["volume_name"],
-                                                                "ParentEntityId": details["id"]})
+                                                                "ParentEntityId": vdc_details["id"]})
                         attached_entities.append({
                             "entitytype": "volume", #TODO was volume_boot before
                             "entities": [
@@ -760,7 +760,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                         })
             if "volumes" in data.viewkeys() and isinstance(data["volumes"], list):
                 for vol in data["volumes"]:
-                    volume_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "volume", "Name": vol["volume_name"], "ParentEntityId": details["id"]})
+                    volume_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "volume", "Name": vol["volume_name"], "ParentEntityId": vdc_details["id"]})
                     attached_entities.append({
                         "entitytype": "volume",
                         "entities": [
@@ -773,7 +773,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                 options.update({"metadata" : data["metadata"]})
             if "nat" in data.viewkeys() and isinstance(data["nat"], list):
                 for nat in data["nat"]:
-                    nat_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "nat_network_service", "Name": nat["volume_name"], "ParentEntityId": details["id"]})
+                    nat_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "nat_network_service", "Name": nat["volume_name"], "ParentEntityId": vdc_details["id"]})
                     attached_entities.append({
                         "entitytype": "nat_network_service",
                         "entities": [
@@ -784,7 +784,19 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                     })
             options.update({"attached_entities": attached_entities})
 
-        elif obj_type == "container"
+        elif obj_type == "container":
+            if "storage_class" in data.viewkeys():
+                storage_class_name = data["storage_class"]
+                db_row = cloudDB.get_row_dict("tblEntities", {"EntityType": obj_type, "Name": storage_class_name, "ParentEntityId": vdc_details["id"]})
+                if data["datareduction"] == "None":
+                    contype = "Regular"
+                else:
+                    contype = data["datareduction"]
+                options.update({
+                    "tblstorageclassesid": db_row["id"],
+                    "minimumiops": data["iops"],
+                    "containerType": contype
+                })
 
         elif obj_type == "volume":
             if "volume_type" in data.viewkeys():
@@ -863,7 +875,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                             "entitytype": obj_type, })
         elif obj_type == "compute_network_service":
             server_farm_row = cloudDB.get_row_dict("tblEntities",
-                                                   {"EntityType": "serverfarm", "ParentEntityId": details["id"],
+                                                   {"EntityType": "serverfarm", "ParentEntityId": vdc_details["id"],
                                                     "Name": data["serverfarm"][0]})
 
             try:
@@ -901,7 +913,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                 "sortsequenceid": seq_num,
                 "entitystatus": "Ready",
                 "entitytype": "compute",
-                "parententityid": details["id"],
+                "parententityid": vdc_details["id"],
                 "qos": qos,
                 "throughputsArray": [
                     {

@@ -131,6 +131,66 @@ def start_validate_vdc(return_object):
     except:
         cloud_utils.log_exception(sys.exc_info())
 
+# def validate_vdc_api_get_returnobj(db, dbid, options, ent_row):
+#     return_object = [{"options": options, "dbid": dbid,
+#                     "caller": validate_entity,
+#                     #"callback": validate_entity_completed,
+#                     "entity": ent_row}]
+#
+#     if options and "commandid" in options:
+#         commandid = options["commandid"]
+#     else:
+#         commandid = cloud_utils.generate_uuid()
+#     dashboard = entity_utils.DashBoard(db, ent_row["id"], ent_row, ent_row["name"], "Validate VDC", "Validating", commandid,
+#                                        title="Topology validating")
+#     return_object[-1]["dashboard"] = dashboard
+#     validate_vdc(db, return_object)
+#     return return_object
+
+def validate_vdc_api(db, dbid, options, ent_row):
+    global _return_object
+    _return_object = [{"options": options, "dbid": dbid,
+                    "caller": validate_entity,
+                    #"callback": validate_entity_completed,
+                    "entity": ent_row}]
+
+    if options and "commandid" in options:
+        commandid = options["commandid"]
+    else:
+        commandid = cloud_utils.generate_uuid()
+    dashboard = entity_utils.DashBoard(db, ent_row["id"], ent_row, ent_row["name"], "Validate VDC", "Validating", commandid,
+                                       title="Topology validating")
+    _return_object[-1]["dashboard"] = dashboard
+
+    return validate_vdc(db, _return_object)
+
+def reserve_resources_api(db, dbid, options, ent_row):
+    global _return_object
+    return_obj = _return_object
+    #return_obj = validate_vdc_api_get_returnobj(db, dbid, options, ent_row)
+    resources = return_obj[0]["resources"]
+    return entity_utils.validate_resources(db, dbid, ent_row, resources, reserve=True)
+
+# status = create_vdc_profiles(db, event_object, vdc_progress=vdc_progress)
+# if status != "success":
+#     dashboard.update_vdc_entitystatus(db, "Ready")
+#     return status
+#
+# status = create_vdc_services(db, event_object, mode="Create", vdc_progress=vdc_progress)
+# if status != "success":
+#     dashboard.update_vdc_entitystatus(db, "Ready")
+#     return
+#
+# status = provision_vdc_manager(db, event_object, vdc_progress=vdc_progress)
+# if status != "success":
+#     dashboard.update_vdc_entitystatus(db, "Ready")
+#     return status
+#
+# status = create_vdc_services(db, event_object, mode="Provision", vdc_progress=vdc_progress)
+# if status != "success":
+#     dashboard.update_vdc_entitystatus(db, "Ready")
+#     return
+
 
 def validate_vdc(db, return_object, vdc_progress=100):
     try:

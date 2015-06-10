@@ -429,7 +429,7 @@ def entity_deletion(db, table, delete_time):
 
 
 def log_message(db, dbid, msg, created_at=None, source="Hawk", type="Info"):
-    print "ERROR: " + str(msg)
+    print "LOG: " + str(msg)
     if not created_at:
         created_at = mysql_now()
 

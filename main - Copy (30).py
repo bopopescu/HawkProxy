@@ -6,25 +6,15 @@ import pprint
 from urlparse import parse_qs
 from cgi import escape
 import sys
-import time
-import datetime
 
 import eventlet
 from eventlet.green import urllib2
 from eventlet import wsgi
 import requests
-import pytz
 
 import utils.gflags_collection
 import cryptC as crypt
-import utils.cloud_utils
 from utils.cloud_utils import CloudGlobalBase
-from entity.entity_functions import EntityFunctions
-import entity.entity_commands
-import entity.validate_entity
-import entity.entity_manager as ent_man
-import rest.rest_api as rest
-import utils.cloud_utils
 
 UA = "http://cfd23.does-it.net:8231"
 AUTH_URL = "http://cfd23.does-it.net:8002/v3"
@@ -37,6 +27,8 @@ ch.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 log.addHandler(ch)
+
+import pytz, datetime
 
 local = pytz.timezone("America/Los_Angeles")
 naive = datetime.datetime.strptime("2001-2-3 10:11:12", "%Y-%m-%d %H:%M:%S")
@@ -505,22 +497,19 @@ def listAll(acls, addr):
     return stringVal
 
 
-def get_spec_details(obj_uuid, acls, canSeeDetails=False):
+def get_spec_details(obj_uuid, obj_type, acls, canSeeDetails=False):
     details = load_ent_details(obj_uuid)  # THESE ARE DETAILS OF PARENT FOR WHOM WE MAKE A CHILD
-    # print details
+    print details
     for a in acls:
         if authorization_object_check_bot_up(details["id"], a["AclEntityId"]):
             canSeeDetails = True
             break
     if canSeeDetails is False:
         return None  # TODO UNAUTHORIZED
-    # details = load_ent_details(obj_uuid)  # THESE ARE DETAILS OF PARENT FOR WHOM WE MAKE A CHILD
+    details = load_ent_details(obj_uuid)  # THESE ARE DETAILS OF PARENT FOR WHOM WE MAKE A CHILD
     if details is None:
-        log.critical("BLANK DETAILS" + str(obj_uuid))
+        print "BLANK DETAILS" + obj_uuid
     return details
-
-def get_spec_details_with_parent_id(ent_type, name, parent_id):
-    return cloudDB.get_row_dict("tblEntities", {"EntityType": ent_type, "Name": name, "ParentEntityId": parent_id})
 
 
 def get_all_parents(obj_ent_id, array):
@@ -557,6 +546,7 @@ def dict_keys_to_lower(dict):
 def create_interface(beg_serv_name, end_serv_name, interface_specs, vdc_id):
     # TODO check either beggining or end must be a switch?
     # TODO?!?!?!?!
+    from entity.entity_functions import EntityFunctions
 
     options = {}
     beggining_row = cloudDB.get_row_dict("tblEntities", {"Name": beg_serv_name, "ParentEntityId": vdc_id})
@@ -589,14 +579,13 @@ def create_interface(beg_serv_name, end_serv_name, interface_specs, vdc_id):
 
 
 def create_interfaces(ent_name, interfaces_array, vdc_id):
-    #TODO Handle interface params
     for interface in interfaces_array:
         beg_serv_name = ent_name
         end_serv_name = interface["subnet"]
         create_interface(beg_serv_name, end_serv_name, interface, vdc_id)
 
 
-def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", child_details=None):  # parent details
+def generate_options(obj_type, obj_uuid, data, details, action="create", child_details=None):  # parent details
     options = {}
 
     print action
@@ -614,44 +603,43 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
     except KeyError:
         descr = ""
 
-    service_type = ""
-    if obj_type == "switch_network_service":
-        service_type = "networkSwitch"
-    elif obj_type == "nat_network_service":
-        service_type = "nat"
-    elif obj_type == "fws_network_service":
-        service_type = "firewall"
-    elif obj_type == "lbs_network_service":
-        service_type = "loadbalancer"
-    elif obj_type == "rts_network_service":
-        service_type = "router"
-    elif obj_type == "ipsecvpn_network_service":
-        service_type = "vpn"
-    elif obj_type == "nms_network_service":
-        service_type = "networkMonitor"
-    # elif obj_type == "volumes":
-    # elif obj_type == "security-groups":
-    # elif obj_type == "security-rules":
-    # elif obj_type == "acl-groups":
-    # elif obj_type == "acl-rules":
-    # elif obj_type == "load-balancer-groups":
-    # elif obj_type == "load-balancer-services":
-    # elif obj_type == "vpn-groups":
-    # elif obj_type == "ipsec-tunnels":
-    elif obj_type == "externalnetwork":
-        service_type = "externalNetwork"
-    elif obj_type == "compute_network_service":
-        service_type = "compute"
-
     if action == "create":
+        service_type = ""
+        if obj_type == "switch_network_service":
+            service_type = "networkSwitch"
+        elif obj_type == "nat_network_service":
+            service_type = "nat"
+        elif obj_type == "fws_network_service":
+            service_type = "firewall"
+        elif obj_type == "lbs_network_service":
+            service_type = "loadbalancer"
+        elif obj_type == "rts_network_service":
+            service_type = "router"
+        elif obj_type == "ipsecvpn_network_service":
+            service_type = "vpn"
+        elif obj_type == "nms_network_service":
+            service_type = "networkMonitor"
+        # elif obj_type == "volumes":
+        # elif obj_type == "security-groups":
+        # elif obj_type == "security-rules":
+        # elif obj_type == "acl-groups":
+        # elif obj_type == "acl-rules":
+        # elif obj_type == "load-balancer-groups":
+        # elif obj_type == "load-balancer-services":
+        # elif obj_type == "vpn-groups":
+        # elif obj_type == "ipsec-tunnels":
+        elif obj_type == "externalnetwork":
+            service_type = "externalNetwork"
+        elif obj_type == "compute_network_service":
+            service_type = "compute"
+
         if len(service_type) > 0:
             options.update({"entitytype": obj_type, "name": name, "description": descr, "servicetype": service_type,
-                            "parententityid": vdc_details["id"]})
+                            "parententityid": details["id"]})
         else:
             options.update(
-                {"name": name, "description": descr, "entitytype": obj_type, "parententityid": vdc_details["id"]})
+                {"name": name, "description": descr, "entitytype": obj_type, "parententityid": details["id"]})
 
-    #-----------------------------------------------------UPDATE--------------------------------------
     elif action == "update" and child_details is not None:
         for key in data:
             try:
@@ -664,64 +652,39 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             except KeyError:
                 continue
 
-        print "UPDATE OPTIONS FOR OBJ: " + obj_type
-        print options
-
-        options.update({
-            "entitytype": obj_type,
-            "parententityid": vdc_details["id"]
-        })
-
-        if len(service_type) > 0: #network service TODO Maybe some of these take extra information?
-            options.update({"servicetype": service_type})
+        if obj_type == "switch_network_service" or obj_type == "nat_network_service" or obj_type == "externalnetwork":
             options.update({
                 "id": child_details["id"],
-                "name": name,
+                "vdc_status": "Ready",
+                "sortsequenceid": child_details["sortsequenceid"],
                 "uniqueid": child_details["uniqueid"],
-                "throughputsArray": [
-                    {
-                        "name": "100",
-                        "id": "100"
-                    },
-                    {
-                        "name": "200",
-                        "id": "200"
-                    },
-                    {
-                        "name": "500",
-                        "id": "500"
-                    },
-                    {
-                        "name": "1000",
-                        "id": "1000"
-                    },
-                    {
-                        "name": "2000",
-                        "id": "2000"
-                    }
-                ]
+                "entitystatus": "Ready",
+                "parententityid": details["id"],
+                "defaultgateways": [{"name": "Default", "dbid": 0}],
             })
+        if obj_type == "nat_network_service":
+            options.update({"servicetype": "nat",
+                            "entitytype": "nat", })
+            try:
+                options.update({"nat_pat_mode": data["pat_mode"]})
+            except KeyError:
+                pass
+        elif obj_type == "switch_network_service":
+            options.update({"servicetype": "networkSwitch",
+                            "entitytype": obj_type, })
 
         elif obj_type == "serverfarm":
-
-            if "metadata" in data.viewkeys():
-                options.update({"metadata" : data["metadata"]})
-            if "ssh_keys" in data.viewkeys():
-                options.update({"ssh_keys" : data["ssh_keys"]})
-            if "dynamic_option" in data.viewkeys():
-                options.update({
-                    "scale_option": data["dynamic_option"],
-                    "min" : data["min"],
-                    "max" : data["max"],
-                    "initial" : data["initial"]
-                })
-                policies = ["bandwidth", "ram", "cpu"]
-                for one in policies:
-                    if one in data["dynamic_options"].viewkeys():
-                        options.update({
-                            str(one) + "_red": data["dynamic_options"][one][0],
-                            str(one) + "_green": data["dynamic_options"][one][1]
-                        })
+            options.update({
+                "parentstatus": "Ready",
+                "status": "Ready",
+                "user_data": "",
+                "entitytype": obj_type,
+                "parententityid": details["id"],
+                "volumes": [],
+                "tblcomputeclassesid": 0,
+                "attach_to": [],
+                "metadata": []
+            })
         elif obj_type == "server":
             try:
                 libname = data["server_boot"]["boot_image"]["library_name"]
@@ -732,8 +695,8 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             except KeyError:
                 imgname = ""
             libraryrow = cloudDB.get_row_dict("tblEntities", {"EntityType": "imagelibrary", "Name": libname})
-            imagerow = get_spec_details_with_parent_id("image", imgname, libraryrow["id"])
-
+            imagerow = cloudDB.get_row_dict("tblEntities", {"EntityType": "image", "Name": imgname,
+                                                            "ParentEntityId": libraryrow["id"]})
             try:
                 options.update({"cpuvcpu": data["cpu"][0]})
             except KeyError:
@@ -742,146 +705,57 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                 options.update({"cpumhz": data["cpu"][1]})
             except KeyError:
                 pass
+            options.update({
 
-            attached_entities = []
-            if "server_boot" in data.viewkeys():
-                if "boot_image" in data["server_boot"].viewkeys():
-                    attached_entities.append({
+                "port_mapping": [],
+                "status": "Ready",
+                "entitytype": obj_type,
+                "parententityid": details["id"],
+                "metadata": [],
+                "attached_entities": [  # TODO All wrong
+                    {
                         "entitytype": "image",
                         "entities": [
                             {
                                 "attachedentityid": imagerow["id"]
                             }
                         ]
-                    })
-                if "boot_volume" in data["server_boot"].viewkeys():
-                    if "volume_name" in data["server_boot"]["boot_volume"].viewkeys():
-                        boot_volume_row = get_spec_details_with_parent_id("volume", data["server_boot"]["boot_volume"]["volume_name"], vdc_details["id"])
-                        attached_entities.append({
-                            "entitytype": "volume", #TODO was volume_boot before
-                            "entities": [
-                                {
-                                    "attachedentityid": boot_volume_row["id"]
-                                }
-                            ]
-                        })
-            if "volumes" in data.viewkeys() and isinstance(data["volumes"], list):
-                for vol in data["volumes"]:
-                    volume_row = get_spec_details_with_parent_id("volume", vol["volume_name"], vdc_details["id"])
-                    attached_entities.append({
-                        "entitytype": "volume",
-                        "entities": [
-                            {
-                                "attachedentityid": volume_row["id"]
-                            }
-                        ]
-                    })
-            if "metadata" in data.viewkeys():
-                options.update({"metadata" : data["metadata"]})
-            if "nat" in data.viewkeys() and isinstance(data["nat"], list):
-                for nat in data["nat"]:
-                    nat_row = get_spec_details_with_parent_id("nat_network_service", nat["volume_name"], vdc_details["id"])
-                    attached_entities.append({
-                        "entitytype": "nat_network_service",
-                        "entities": [
-                            {
-                                "attachedentityid": nat_row["id"]
-                            }
-                        ]
-                    })
-            options.update({"attached_entities": attached_entities})
+                    },
+                    {
+                        "entitytype": "volume_boot"
+                    },
+                    {
+                        "entitytype": "volume"
+                    },
+                    {
+                        "entitytype": "nat_network_service"  # TODO where does this come from
+                    }
+                ]
+            })
 
-        elif obj_type == "container":
-            if "storage_class" in data.viewkeys():
-                storage_class_name = data["storage_class"]
-                db_row = get_spec_details_with_parent_id(ent_type=obj_type, name=storage_class_name, parent_id=vdc_details["id"])
-                if data["datareduction"] == "None":
-                    contype = "Regular"
-                else:
-                    contype = data["datareduction"]
-                options.update({
-                    "tblstorageclassesid": db_row["id"],
-                    "minimumiops": data["iops"],
-                    "containerType": contype
-                })
-
-        elif obj_type == "volume":
-            if "volume_type" in data.viewkeys():
-                options.update({"voltype": data["volume_type"]})
-            if "snapshot_params" in data.viewkeys():
-                options.update({
-                    "SnPolicyLimit": data["snapshot_params"]["policy_limit"],
-                    "SnapshotsPolicy": data["snapshot_params"]["snapshot_policy"],
-                    "schsnptype": data["snapshot_params"]["policy_type"],
-                })
-                if "policy_hours" in data["snapshot_params"].viewkeys():
-                    hour_string = ""
-                    if isinstance(data["snapshot_params"]["policy_hours"], list):
-                        for hour in data["snapshot_params"]["policy_hours"]:
-                            hour_string += str(hour)
-                            hour_string += ","
-                        hour_string = hour_string[:-1]
-                        options.update({"schsnphours": hour_string})
-                        options.update({"SnPolicyHrs": hour_string})
-            if "backup_params" in data.viewkeys():
-                params = data["backup_params"]
-                options.update({
-                    "BkPolicyLimit": params["policy_limit"],
-                    "schbkuplimit": params["policy_limit"],
-                    "BackupPolicy": params["backup_policy"],
-                    "schbkuptype": params["policy_type"],
-                    "BkPolicyTime": params["policy_time"],
-                    "schbkuptime": params["policy_time"],
-                })
-                if "policy_monthdays" in params.viewkeys():
-                    if isinstance(params["policy_monthdays"], list):
-                        if "policy_weekdays" in params.viewkeys():
-                            if isinstance(params["policy_weekdays"], list):
-                                num_monthdays = len(params["policy_monthdays"])
-                                num_weekdays = len(params["policy_weekdays"])
-                                if num_monthdays == 0:
-                                    if num_weekdays > 0:
-                                        options.update({
-                                            "schbkupon": "weekday"
-                                        })
-                                        weekday_string = ""
-                                        for weekday in params["policy_weekdays"]:
-                                            weekday_string += str(weekday)
-                                            weekday_string += ","
-                                        weekday_string = weekday_string[:-1]
-                                        options.update({
-                                            "schbkupdet": weekday_string,
-                                            "BkPolicyWeekDays": weekday_string
-                                        })
-                                elif num_weekdays == 0:
-                                    if num_monthdays > 0:
-                                        options.update({
-                                            "schbkupon": "date"
-                                        })
-                                        monthday_string = ""
-                                        for monthday in params["policy_monthdays"]:
-                                            monthday_string += str(monthday)
-                                            monthday_string += ","
-                                        monthday_string = monthday_string[:-1]
-                                        options.update({
-                                            "schbkupdet": monthday_string,
-                                            "BkPolicyMonthDays": monthday_string
-                                        })
-
-        # elif obj_type == "security_group":
-        # elif obj_type == "security_rule":
-        # elif obj_type == "acl_group":
-        # elif obj_type == "acl_rule":
-        # elif obj_type == "lbs-group":
-        # elif obj_type == "lbs_service":
-        # elif obj_type == "vpn_group":
-        # elif obj_type == "ipsecvpn_network_service":
+        # elif obj_type == "firewalls":
+        # elif obj_type == "load-balancers":
+        # elif obj_type == "routers":
+        # elif obj_type == "vpns":
+        # elif obj_type == "monitors":
+        # elif obj_type == "containers":
+        # elif obj_type == "volumes":
+        # elif obj_type == "security-groups":
+        # elif obj_type == "security-rules":
+        # elif obj_type == "acl-groups":
+        # elif obj_type == "acl-rules":
+        # elif obj_type == "load-balancer-groups":
+        # elif obj_type == "load-balancer-services":
+        # elif obj_type == "vpn-groups":
+        # elif obj_type == "ipsec-tunnels":
 
         elif obj_type == "externalnetwork":
             options.update({"servicetype": "externalNetwork",
                             "entitytype": obj_type, })
         elif obj_type == "compute_network_service":
-            server_farm_row = get_spec_details_with_parent_id("serverfarm", data["serverfarm"][0], vdc_details["id"])
+            server_farm_row = cloudDB.get_row_dict("tblEntities",
+                                                   {"EntityType": "serverfarm", "ParentEntityId": details["id"],
+                                                    "Name": data["serverfarm"][0]})
 
             try:
                 max_inst_count = data["params"]["max_instances_count"]
@@ -918,7 +792,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                 "sortsequenceid": seq_num,
                 "entitystatus": "Ready",
                 "entitytype": "compute",
-                "parententityid": vdc_details["id"],
+                "parententityid": details["id"],
                 "qos": qos,
                 "throughputsArray": [
                     {
@@ -944,37 +818,12 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
     return options
 
 
-def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, r, s_row):
-    options = generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create")
-    ent = EntityFunctions(db=cloudDB, dbid=0, slice_row=s_row)
-    entity_res = ent._create(cloudDB, options)
-    ent.update_all_service_uris(cloudDB, r, slice_url=UA)
-    update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row)
-
-    if "interfaces" in formatted_post_data:
-        create_interfaces(formatted_post_data["name"], formatted_post_data["interfaces"], parent_vdc_details["id"])
-    return entity_res
-
-def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row):
-    # print ent_type
-    # print parent_uuid
-    # print parent_vdc_details
-    # print formatted_post_data
-    # print s_row
-    # print generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create")
-    # print get_spec_details_with_parent_id(ent_type, formatted_post_data["name"], parent_vdc_details["id"])
-    ent = EntityFunctions(db=cloudDB, dbid=get_spec_details_with_parent_id(ent_type, formatted_post_data["name"], parent_vdc_details["id"])["id"], slice_row=s_row)
-    ent._status(cloudDB, generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create"), do_get=True)
-    # print "ENTITY ROW: " + str(ent.row)
-    if ent.row is None:
-        log.critical("ERROR ENTITY ROW NONE " + str(ent.row))
-    options = generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "update", child_details=ent.row)
-    res = ent._update(cloudDB, options)
-    entity.entity_commands.update_multiple(cloudDB, ent.row["id"], options)
-    return res
-
 def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
     global RES_CODE
+    from entity.entity_functions import EntityFunctions
+    import entity.entity_manager
+    import rest.rest_api as rest
+    import utils.cloud_utils
 
     print "PERFORMING ACTION: " + reqm + " " + obj_uuid + " " + obj_type
     if reqm == "POST" or reqm == "PUT":
@@ -1078,7 +927,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         print headers
         print spec_uri
 
-        child_table = ent_man.entities[obj_type].child_table
+        child_table = entity.entity_manager.entities[obj_type].child_table
         columns = cloudDB.execute_db("SHOW COLUMNS FROM %s" % child_table)
 
         if reqm == "POST" or reqm == "PUT":
@@ -1110,28 +959,40 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 pass
 
         if reqm == "POST":
-            r = rest.post_rest(UA + spec_uri, data, headers)
+            if obj_type != "network_interface":
+                r = rest.post_rest(UA + spec_uri, data, headers)
+            else:
+                r = {"http_status_code": 200}
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                entity_res = create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower)
+                # options = data
+                options = generate_options(obj_type, obj_uuid, data, details, "create")
+                # if details is not None:
+                #     options.update({"parententityid": details["id"]})
+                # options.update({"entitytype": obj_type})
+                entitya = EntityFunctions(db=cloudDB, dbid=0, slice_row=slice_row_lower)
+                entity_res = entitya._create(cloudDB, options)
+                entitya.update_all_service_uris(cloudDB, r, slice_url=UA)
+                options = generate_options(obj_type, obj_uuid, data, details, "update", child_details=entitya.row)
+                entitya._update(cloudDB, options)
+                if "interfaces" in data:
+                    create_interfaces(data["name"], data["interfaces"], details["id"])
                 RES_CODE = "201 Created"
-                # ent = EntityFunctions(db=cloudDB, dbid=0)
-                # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":  # TODO How to handle provisioining/deprovisioning?
             # if obj_type == "vdc":
             # provision here
             # pass
             r = rest.put_rest(UA + spec_uri, data, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                # options = data
+                options = data
+                print options
+                VDCID = get_parent_details(details["id"])["id"]
+                entity = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
                 # print options
-                VDC = get_parent_details(details["id"])
-                # entity = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
-                # # print options
-                # # print entity._update(cloudDB, options, do_get=True)
-                # entity_res = entity._update(cloudDB, options)  # TODO This does not update throughputs
-                #
-                # entity.entity_commands.update_multiple(cloudDB, details["id"], options)
-                update_entity(obj_type, VDC["UniqueId"], VDC, data, slice_row_lower)
+                # print entity._update(cloudDB, options, do_get=True)
+                entity_res = entity._update(cloudDB, options)  # TODO This does not update throughputs
+                import entity.entity_commands
+
+                entity.entity_commands.update_multiple(cloudDB, details["id"], options)
                 RES_CODE = "202 Accepted"
         elif reqm == "GET":
             r = rest.get_rest(UA + spec_uri, headers)
@@ -1159,67 +1020,15 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
 
     return False
 
-def validate(ent_uuid, acls):
-    row = get_spec_details(ent_uuid, acls)
-    row = dict_keys_to_lower(row)
-    command_options = {"command": "validate"}
-    #start_status = entity.entity_commands.entity_commands(cloudDB, row["id"], options=command_options)
-    return entity.validate_entity.validate_vdc_api(cloudDB, row["id"], command_options, row)
 
-def reserve_resources(ent_uuid, acls):
-    #TODO forward to cfd
-    row = get_spec_details(ent_uuid, acls)
-    row = dict_keys_to_lower(row)
-    command_options = {"command": "reserve-resources"}
-    return entity.validate_entity.reserve_resources_api(cloudDB, row["id"], command_options, row)
-
-def provision(ent_uuid, acls):
-    #TODO Forward to cfd
-    row = get_spec_details(ent_uuid, acls)
-    row = dict_keys_to_lower(row)
-    command_options = {"command": "provision"}
-
-    pass
-
-def special_action(ent_type, split, reqm, acls, userData, post_data):
-    print "RUNNING_ACTION: " + str(post_data) + " " + str(split) + " " + reqm
-    ent_uuid = split[1]
-    if reqm == "POST":
-        if ent_type == "vdcs":
-            obj_type = "vdc"
-            try:
-                data = json.loads(str(post_data))
-                data = dict_keys_to_lower(data)
-                if len(data) == 0:
-                    return False
-            except:
-                print sys.exc_info()
-                return "ERROR: Failed to parse post data in action request"
-            command = data.popitem()[0]
-            if command == "reserve-resources":
-                if validate(ent_uuid, acls) == "success": #validates once
-                    result = reserve_resources(ent_uuid, acls)
-                    return {command: result}
-                else:
-                    log.error("VDC failed validation")
-                pass
-            elif command == "provision":
-                if validate(ent_uuid, acls) == "success": #validates once
-                    if reserve_resources(ent_uuid, acls) == "success":
-                        result = provision(ent_uuid, acls)
-                        return {command: result}
-                    else:
-                        log.error("VDC failed resource allocation")
-                else:
-                    log.error("VDC failed validation")
-                pass
-            elif command == "activate":
-                pass
-            elif command == "deprovision":
-                pass
-    return False
-
-
+# REM curl -s -S -i -X DELETE http://localhost:8091/v2/switch/d9f5dbf5-9eb5-4b17-a25a-3e0d34ac1fcf --header "X-Auth-Token: 0dee56c9a49a4957bcf3639729aa4598"
+# REM curl -s -S -i -X DELETE http://cfd23.does-it.net:8231/Organization-2817-adbf/org10/dept12/vdc73/nets/net329 --header "Content-Type: application/cloudflow.net.cloud.Subnet+json"
+#
+# REM curl -s -S -i -X DELETE http://cfd23.does-it.net:8231/Vadim-Organization/org8/dept11/vdc22/nets/net7 --header "Content-Type: application/cloudflow.net.cloud.Subnet+json"
+#
+# REM curl -s -S -i -X POST http://localhost:8091/v2/14ab8813-00a6-48bd-9c8d-65b862331c5e/servers -d "{\"name\":\"New_Switches_A\"}" --header "X-Auth-Token: 0dee56c9a49a4957bcf3639729aa4598"
+# REM curl -s -S -i -X PUT http://localhost:8091/v2/switch/770060cb-a082-490f-81b4-dc4454a9aed9 -d "{\"name\":\"New_Switches_B\"}" --header "X-Auth-Token: 0dee56c9a49a4957bcf3639729aa4598"
+# curl -s -S -i -X DELETE http://localhost:8091/v2/switch/770060cb-a082-490f-81b4-dc4454a9aed9 --header "X-Auth-Token: 0dee56c9a49a4957bcf3639729aa4598"
 
 def special_process(action_type, split, reqm, acls, user_data, post_data):
     print "SPECIAL THINGS: " + action_type + " " + str(split) + " " + reqm
@@ -1240,7 +1049,7 @@ def special_process(action_type, split, reqm, acls, user_data, post_data):
 
     if obj_type is None or obj_uuid is None:
         return "ERROR: Entity type or uuid not specified"
-    details = get_spec_details(obj_uuid, acls, True)
+    details = get_spec_details(obj_uuid, obj_type, acls, True)
     if not details:
         return "ERROR: Parent details not found"
     # print details
@@ -1248,9 +1057,11 @@ def special_process(action_type, split, reqm, acls, user_data, post_data):
 
 
 def get_dict_details(details):
+    import entity.entity_manager
+
     dicto = {}
     # if details["EntityType"] == "organization" or details["EntityType"] == "department":
-    row = cloudDB.get_row_dict(ent_man.entities[details["EntityType"]].child_table,
+    row = cloudDB.get_row_dict(entity.entity_manager.entities[details["EntityType"]].child_table,
                                {"tblEntities": details["id"]})
     print row
     dicto.update(row)
@@ -1288,8 +1099,6 @@ def request_api(addr, userData, reqm, post_data):
                                  "acl-groups", "acl-rules", "load-balancer-groups", "load-balancer-services",
                                  "vpn-groups", "ipsec-tunnels", "interfaces", "external-network-services"]
     duplicate_specific_action_addresses = ["external-networks", "virtual-networks", "image-libraries"]
-    action_entities = ["vdcs", "nats", "external-networks", "firewalls", "load-balancers", "routers", "vpns",
-                       "monitors", "compute-services", "server-farms", "servers", "containers", "volumes"]
 
     for part in split:
         if part in duplicate_specific_action_addresses and len(split) > 1:
@@ -1308,14 +1117,6 @@ def request_api(addr, userData, reqm, post_data):
     elif reqm == "POST" or reqm == "PUT" or reqm == "DELETE":
         if len(split) == 3:
             if split[2] == "vdcs":
-                if len(split[1]) == 36:
-                    return special_process("vdcs", split, reqm, acls, userData, post_data)
-            elif split[0] in action_entities:
-                if len(split[1]) == 36:
-                    if split[2] == "actions":
-                        return special_action(split[0], split, reqm, acls, userData, post_data)
-        elif len(split) == 2: #PUT OR DELETE ON vdcs/vdc_uuid
-            if split[0] == "vdcs":
                 if len(split[1]) == 36:
                     return special_process("vdcs", split, reqm, acls, userData, post_data)
 
@@ -1652,6 +1453,8 @@ def serve(env, start_response):
         start_response(RES_CODE, defresponse_header)
         return oman.wrong_api_version()
 
+
+import utils.cloud_utils
 
 utils.cloud_utils.setup_flags_logs('hawk-rpc.log', flagfile='cloudflow_flags.conf', logdir=None, init_logger=True)
 wsgi.server(eventlet.listen(('', 8091)), serve)

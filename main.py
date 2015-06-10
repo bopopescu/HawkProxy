@@ -646,6 +646,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
             options.update(
                 {"name": name, "description": descr, "entitytype": obj_type, "parententityid": details["id"]})
 
+    #-----------------------------------------------------UPDATE--------------------------------------
     elif action == "update" and child_details is not None:
         for key in data:
             try:
@@ -663,7 +664,7 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
             "parententityid": details["id"]
         })
 
-        if len(service_type) > 0: #network service
+        if len(service_type) > 0: #network service TODO Maybe some of these take extra information?
             options.update({"servicetype": service_type})
             options.update({
                 "id": child_details["id"],
@@ -733,49 +734,129 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
                 options.update({"cpumhz": data["cpu"][1]})
             except KeyError:
                 pass
-            options.update({
 
-                "port_mapping": [],
-                "status": "Ready",
-                "entitytype": obj_type,
-                "parententityid": details["id"],
-                "metadata": [],
-                "attached_entities": [  # TODO All wrong
-                    {
+            attached_entities = []
+            if "server_boot" in data.viewkeys():
+                if "boot_image" in data["server_boot"].viewkeys():
+                    attached_entities.append({
                         "entitytype": "image",
                         "entities": [
                             {
                                 "attachedentityid": imagerow["id"]
                             }
                         ]
-                    },
-                    {
-                        "entitytype": "volume_boot"
-                    },
-                    {
-                        "entitytype": "volume"
-                    },
-                    {
-                        "entitytype": "nat_network_service"  # TODO where does this come from
-                    }
-                ]
-            })
+                    })
+                if "boot_volume" in data["server_boot"].viewkeys():
+                    if "volume_name" in data["server_boot"]["boot_volume"].viewkeys():
+                        boot_volume_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "volume", "Name": data["server_boot"]["boot_volume"]["volume_name"],
+                                                                "ParentEntityId": details["id"]})
+                        attached_entities.append({
+                            "entitytype": "volume", #TODO was volume_boot before
+                            "entities": [
+                                {
+                                    "attachedentityid": boot_volume_row["id"]
+                                }
+                            ]
+                        })
+            if "volumes" in data.viewkeys() and isinstance(data["volumes"], list):
+                for vol in data["volumes"]:
+                    volume_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "volume", "Name": vol["volume_name"], "ParentEntityId": details["id"]})
+                    attached_entities.append({
+                        "entitytype": "volume",
+                        "entities": [
+                            {
+                                "attachedentityid": volume_row["id"]
+                            }
+                        ]
+                    })
+            if "metadata" in data.viewkeys():
+                options.update({"metadata" : data["metadata"]})
+            if "nat" in data.viewkeys() and isinstance(data["nat"], list):
+                for nat in data["nat"]:
+                    nat_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "nat_network_service", "Name": nat["volume_name"], "ParentEntityId": details["id"]})
+                    attached_entities.append({
+                        "entitytype": "nat_network_service",
+                        "entities": [
+                            {
+                                "attachedentityid": nat_row["id"]
+                            }
+                        ]
+                    })
+            options.update({"attached_entities": attached_entities})
 
-        # elif obj_type == "firewalls":
-        # elif obj_type == "load-balancers":
-        # elif obj_type == "routers":
-        # elif obj_type == "vpns":
-        # elif obj_type == "monitors":
-        # elif obj_type == "containers":
-        # elif obj_type == "volumes":
-        # elif obj_type == "security-groups":
-        # elif obj_type == "security-rules":
-        # elif obj_type == "acl-groups":
-        # elif obj_type == "acl-rules":
-        # elif obj_type == "load-balancer-groups":
-        # elif obj_type == "load-balancer-services":
-        # elif obj_type == "vpn-groups":
-        # elif obj_type == "ipsec-tunnels":
+        elif obj_type == "container"
+
+        elif obj_type == "volume":
+            if "volume_type" in data.viewkeys():
+                options.update({"voltype": data["volume_type"]})
+            if "snapshot_params" in data.viewkeys():
+                options.update({
+                    "SnPolicyLimit": data["snapshot_params"]["policy_limit"],
+                    "SnapshotsPolicy": data["snapshot_params"]["snapshot_policy"],
+                    "schsnptype": data["snapshot_params"]["policy_type"],
+                })
+                if "policy_hours" in data["snapshot_params"].viewkeys():
+                    hour_string = ""
+                    if isinstance(data["snapshot_params"]["policy_hours"], list):
+                        for hour in data["snapshot_params"]["policy_hours"]:
+                            hour_string += str(hour)
+                            hour_string += ","
+                        hour_string = hour_string[:-1]
+                        options.update({"schsnphours": hour_string})
+                        options.update({"SnPolicyHrs": hour_string})
+            if "backup_params" in data.viewkeys():
+                params = data["backup_params"]
+                options.update({
+                    "BkPolicyLimit": params["policy_limit"],
+                    "schbkuplimit": params["policy_limit"],
+                    "BackupPolicy": params["backup_policy"],
+                    "schbkuptype": params["policy_type"],
+                    "BkPolicyTime": params["policy_time"],
+                    "schbkuptime": params["policy_time"],
+                })
+                if "policy_monthdays" in params.viewkeys():
+                    if isinstance(params["policy_monthdays"], list):
+                        if "policy_weekdays" in params.viewkeys():
+                            if isinstance(params["policy_weekdays"], list):
+                                num_monthdays = len(params["policy_monthdays"])
+                                num_weekdays = len(params["policy_weekdays"])
+                                if num_monthdays == 0:
+                                    if num_weekdays > 0:
+                                        options.update({
+                                            "schbkupon": "weekday"
+                                        })
+                                        weekday_string = ""
+                                        for weekday in params["policy_weekdays"]:
+                                            weekday_string += str(weekday)
+                                            weekday_string += ","
+                                        weekday_string = weekday_string[:-1]
+                                        options.update({
+                                            "schbkupdet": weekday_string,
+                                            "BkPolicyWeekDays": weekday_string
+                                        })
+                                elif num_weekdays == 0:
+                                    if num_monthdays > 0:
+                                        options.update({
+                                            "schbkupon": "date"
+                                        })
+                                        monthday_string = ""
+                                        for monthday in params["policy_monthdays"]:
+                                            monthday_string += str(monthday)
+                                            monthday_string += ","
+                                        monthday_string = monthday_string[:-1]
+                                        options.update({
+                                            "schbkupdet": monthday_string,
+                                            "BkPolicyMonthDays": monthday_string
+                                        })
+
+        # elif obj_type == "security_group":
+        # elif obj_type == "security_rule":
+        # elif obj_type == "acl_group":
+        # elif obj_type == "acl_rule":
+        # elif obj_type == "lbs-group":
+        # elif obj_type == "lbs_service":
+        # elif obj_type == "vpn_group":
+        # elif obj_type == "ipsecvpn_network_service":
 
         elif obj_type == "externalnetwork":
             options.update({"servicetype": "externalNetwork",
@@ -846,23 +927,26 @@ def generate_options(obj_type, obj_uuid, data, details, action="create", child_d
     return options
 
 
-def create_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data):
+def create_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data, r, s_row):
     options = generate_options(ent_type, vdc_uuid, formatted_post_data, parent_vdc_details, "create")
-    ent = EntityFunctions(db=cloudDB, dbid=0)
+    ent = EntityFunctions(db=cloudDB, dbid=0, slice_row=s_row)
     entity_res = ent._create(cloudDB, options)
-
-    update_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data)
+    ent.update_all_service_uris(cloudDB, r, slice_url=UA)
+    #TODO vdc creation does not work
+    update_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data, s_row)
 
     if "interfaces" in formatted_post_data:
         create_interfaces(formatted_post_data["name"], formatted_post_data["interfaces"], parent_vdc_details["id"])
     return entity_res
 
-def update_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data):
-    ent = EntityFunctions(db=cloudDB, dbid=0)
+def update_entity(ent_type, vdc_uuid, parent_vdc_details, formatted_post_data, s_row):
+    ent = EntityFunctions(db=cloudDB, dbid=0, slice_row=s_row)
     ent._status(cloudDB, generate_options(ent_type, vdc_uuid, formatted_post_data, parent_vdc_details, "create"))
     print ent.row
     options = generate_options(ent_type, vdc_uuid, formatted_post_data, parent_vdc_details, "update", child_details=ent.row)
-    return ent._update(cloudDB, options)
+    res = ent._update(cloudDB, options)
+    entity.entity_commands.update_multiple(cloudDB, ent.row["id"], options)
+    return res
 
 def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
     global RES_CODE
@@ -1003,25 +1087,26 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         if reqm == "POST":
             r = rest.post_rest(UA + spec_uri, data, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                entity_res = create_entity(obj_type, obj_uuid, details, data)
+                entity_res = create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower)
                 RES_CODE = "201 Created"
-                ent = EntityFunctions(db=cloudDB, dbid=0)
-                ent.update_all_service_uris(cloudDB, r, slice_url=UA)
+                # ent = EntityFunctions(db=cloudDB, dbid=0)
+                # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":  # TODO How to handle provisioining/deprovisioning?
             # if obj_type == "vdc":
             # provision here
             # pass
             r = rest.put_rest(UA + spec_uri, data, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                options = data
-                print options
-                VDCID = get_parent_details(details["id"])["id"]
-                entity = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
+                # options = data
                 # print options
-                # print entity._update(cloudDB, options, do_get=True)
-                entity_res = entity._update(cloudDB, options)  # TODO This does not update throughputs
-
-                entity.entity_commands.update_multiple(cloudDB, details["id"], options)
+                VDC = get_parent_details(details["id"])
+                # entity = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
+                # # print options
+                # # print entity._update(cloudDB, options, do_get=True)
+                # entity_res = entity._update(cloudDB, options)  # TODO This does not update throughputs
+                #
+                # entity.entity_commands.update_multiple(cloudDB, details["id"], options)
+                update_entity(obj_type, VDC["UniqueId"], VDC, data, slice_row_lower)
                 RES_CODE = "202 Accepted"
         elif reqm == "GET":
             r = rest.get_rest(UA + spec_uri, headers)

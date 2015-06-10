@@ -25,6 +25,7 @@ import entity.validate_entity
 import entity.entity_manager as ent_man
 import rest.rest_api as rest
 import utils.cloud_utils
+import api_actions
 
 UA = "http://cfd23.does-it.net:8231"
 AUTH_URL = "http://cfd23.does-it.net:8002/v3"
@@ -1164,22 +1165,21 @@ def validate(ent_uuid, acls):
     row = dict_keys_to_lower(row)
     command_options = {"command": "validate"}
     #start_status = entity.entity_commands.entity_commands(cloudDB, row["id"], options=command_options)
-    return entity.validate_entity.validate_vdc_api(cloudDB, row["id"], command_options, row)
+    return api_actions.validate_vdc(cloudDB, row["id"], command_options, row)
 
 def reserve_resources(ent_uuid, acls):
     #TODO forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "reserve-resources"}
-    return entity.validate_entity.reserve_resources_api(cloudDB, row["id"], command_options, row)
+    return api_actions.reserve_resources(cloudDB, row["id"], command_options, row)
 
 def provision(ent_uuid, acls):
     #TODO Forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "provision"}
-
-    pass
+    return api_actions.provision(cloudDB, row["id"], command_options, row)
 
 def special_action(ent_type, split, reqm, acls, userData, post_data):
     print "RUNNING_ACTION: " + str(post_data) + " " + str(split) + " " + reqm

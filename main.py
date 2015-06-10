@@ -21,6 +21,7 @@ import utils.cloud_utils
 from utils.cloud_utils import CloudGlobalBase
 from entity.entity_functions import EntityFunctions
 import entity.entity_commands
+import entity.entity_utils
 import entity.validate_entity
 import entity.entity_manager as ent_man
 import rest.rest_api as rest
@@ -945,10 +946,15 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
     return options
 
 
-def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, r, s_row):
+def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row):
     options = generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create")
     ent = EntityFunctions(db=cloudDB, dbid=0, slice_row=s_row)
     entity_res = ent._create(cloudDB, options)
+    ent._status(cloudDB, options, do_get=True)
+    print "ROW: " + str(ent.row)
+    element, error = entity.entity_manager.get_entity_json(cloudDB, ent.row["id"], ent.row)
+    url, error = ent.get_entity_uri(cloudDB, ent.row["id"], ent.row)
+    r = entity.entity_utils.put_entity(element, ent.row["entitytype"], url)
     ent.update_all_service_uris(cloudDB, r, slice_url=UA)
     update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row)
 
@@ -1111,12 +1117,12 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 pass
 
         if reqm == "POST":
-            r = rest.post_rest(UA + spec_uri, data, headers)
-            if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                entity_res = create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower)
-                RES_CODE = "201 Created"
-                # ent = EntityFunctions(db=cloudDB, dbid=0)
-                # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
+            #r = rest.post_rest(UA + spec_uri, data, headers)
+            #if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
+            entity_res = create_entity(obj_type, obj_uuid, details, data, slice_row_lower)
+            RES_CODE = "201 Created"
+            # ent = EntityFunctions(db=cloudDB, dbid=0)
+            # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":  # TODO How to handle provisioining/deprovisioning?
             # if obj_type == "vdc":
             # provision here
@@ -1146,15 +1152,15 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 entity = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
                 entity_res = entity._delete(cloudDB, options)
                 RES_CODE = "202 Accepted"
-        try:
-            created_entity_uri = r["uri"]
-        except:
-            # print sys.exc_info()
-            if reqm != "DELETE" and obj_type != "network_interface":
-                return "ERROR: Incorrect/Empty CDF Response: " + str(r)
+        # try:
+        #     created_entity_uri = r["uri"]
+        # except:
+        #     # print sys.exc_info()
+        #     if reqm != "DELETE" and obj_type != "network_interface":
+        #         return "ERROR: Incorrect/Empty CDF Response: " + str(r)
 
         print entity_res
-        comp_res = {"CDF": r, "HAWK-DB": json.loads(entity_res)}
+        comp_res = {"HAWK-DB": json.loads(entity_res)}
         return comp_res
         # return "CDF RESPONSE:\n" + json.dumps(r, sort_keys=True, indent=4, separators=(',', ': ')) + "\nHAWK-DB RESPONSE:\n" + str(entity_res)
 
@@ -1173,13 +1179,13 @@ def reserve_resources(ent_uuid, acls, return_object):
     command_options = {"command": "reserve-resources"}
     return api_actions.reserve_resources(cloudDB, row["id"], command_options, row, return_obj=return_object)
 
-def provision(ent_uuid, acls, return_object): #flag for async
+def provision(ent_uuid, acls): #flag for async
     #TODO Forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "provision"}
     #api_actions.prov2(cloudDB, row["id"], command_options, row)
-    return api_actions.provision(cloudDB, row["id"], command_options, row, return_obj=return_object)
+    return api_actions.provision(cloudDB, row["id"], command_options, row)
 
 def activate(ent_uuid, acls, return_object):
     #check that the vdc is in the proper state, eg provisioned
@@ -1198,7 +1204,13 @@ def activate(ent_uuid, acls, return_object):
     row = dict_keys_to_lower(row)
     command_options = {"command": "activate"}
 
-    return api_actions.activate(cloudDB, return_obj=return_object)
+    return api_actions.activate(cloudDB, row["id"], command_options)
+
+def deprovision(ent_uuid, acls):
+    row = get_spec_details(ent_uuid, acls)
+    row = dict_keys_to_lower(row)
+    command_options = {"command": "deprovision"}
+    return api_actions.deprovision(cloudDB, row["id"], command_options)
 
 def special_action(ent_type, split, reqm, acls, userData, post_data):
     print "RUNNING_ACTION: " + str(post_data) + " " + str(split) + " " + reqm
@@ -1229,7 +1241,7 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
                 valid = validation["status"]
                 if valid == "success": #validates once
                     if reserve_resources(ent_uuid, acls, validation["return_object"]) == "success":
-                        result = provision(ent_uuid, acls, validation["return_object"])
+                        result = provision(ent_uuid, acls)
                         return {command: result}
                     else:
                         log.error("VDC failed resource allocation")
@@ -1242,12 +1254,12 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
                 valid = validation["status"]
                 if valid == "success": #validates once
                     if reserve_resources(ent_uuid, acls, validation["return_object"]) == "success":
-                        if provision(ent_uuid, acls, validation["return_object"]) == "success":
-                            result = activate(ent_uuid, acls, validation["return_object"])
-                            return {command: result}
-                        else:
-                            log.error("VDC failed provisioning")
-                            return {"provision": "failed"}
+                        # if provision(ent_uuid, acls, validation["return_object"]) == "success":
+                        result = activate(ent_uuid, acls, validation["return_object"])
+                        return {command: result}
+                        # else:
+                        #     log.error("VDC failed provisioning")
+                        #     return {"provision": "failed"}
                     else:
                         log.error("VDC failed resource allocation")
                         return {"reserve-resources": "failed"}
@@ -1255,7 +1267,8 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
                     log.error("VDC failed validation")
                     return {"validate": "failed"}
             elif command == "deprovision":
-                pass
+                res = deprovision(ent_uuid, acls)
+                return {command: res}
     return False
 
 

@@ -58,34 +58,41 @@ def reserve_resources(db, dbid, options, ent_row, return_obj=None):
 #     print return_object
 #     return prov.provision_vdc(db, return_object)
 
-def provision(db, dbid, options, ent_row, return_obj=None):
-    if return_obj is None:
-        return_obj = validate_vdc(db, dbid, options, ent_row)["return_object"]
-    ent_row = return_obj[-1]["entity"]
-    vdc_progress = 100
-    return_obj[-1]["options"] = options
-    dashboard = return_obj[-1]["dashboard"]
-    status = prov.create_vdc_profiles(db, return_obj, vdc_progress=vdc_progress)
-    if status != "success":
-        utils.cloud_utils.log_exception("Failed to create vdc profiles")
-        dashboard.update_vdc_entitystatus(db, "Ready")
-        return status
+def provision(db, dbid, options, ent_row):
+    # if return_obj is None:
+    #     return_obj = validate_vdc(db, dbid, options, ent_row)["return_object"]
+    # ent_row = return_obj[-1]["entity"]
+    # vdc_progress = 100
+    # return_obj[-1]["options"] = options
 
-    status = prov.create_vdc_services(db, return_obj, mode="Create", vdc_progress=vdc_progress)
-    if status != "success":
-        utils.cloud_utils.log_exception("Failed to create vdc services")
-        dashboard.update_vdc_entitystatus(db, "Ready")
-        return status
+    return prov.provision_entity(db, dbid, options=options)
+    # dashboard = return_obj[-1]["dashboard"]
+    # status = prov.create_vdc_profiles(db, return_obj, vdc_progress=vdc_progress)
+    # if status != "success":
+    #     utils.cloud_utils.log_exception("Failed to create vdc profiles")
+    #     dashboard.update_vdc_entitystatus(db, "Ready")
+    #     return status
+    #
+    # status = prov.create_vdc_services(db, return_obj, mode="Create", vdc_progress=vdc_progress)
+    # if status != "success":
+    #     utils.cloud_utils.log_exception("Failed to create vdc services")
+    #     dashboard.update_vdc_entitystatus(db, "Ready")
+    #     return status
+    #
+    # status = prov.provision_vdc_manager(db, return_obj, vdc_progress=vdc_progress)
+    # if status != "success":
+    #     utils.cloud_utils.log_exception("Failed to provision vdc manager")
+    #     dashboard.update_vdc_entitystatus(db, "Ready")
+    #     return status
+    #
+    # status = prov.create_vdc_services(db, return_obj, mode="Provision", vdc_progress=vdc_progress)
+    # dashboard.update_vdc_entitystatus(db, "Ready")
+    # return status
 
-    status = prov.provision_vdc_manager(db, return_obj, vdc_progress=vdc_progress)
-    if status != "success":
-        utils.cloud_utils.log_exception("Failed to provision vdc manager")
-        dashboard.update_vdc_entitystatus(db, "Ready")
-        return status
+def activate(db, dbid, command_options):
+    #return prov.activate_vdc(db, return_obj)
+    return prov.activate_entity(db, dbid, options=command_options)
+    #return prov.start_activate_vdc(return_obj)
 
-    status = prov.create_vdc_services(db, return_obj, mode="Provision", vdc_progress=vdc_progress)
-    dashboard.update_vdc_entitystatus(db, "Ready")
-    return status
-
-def activate(db, return_obj):
-    return prov.activate_vdc(db, return_obj)
+def deprovision(db, ent_id, command_options):
+    return prov.deprovision_entity(db, ent_id, options=command_options)

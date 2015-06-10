@@ -2426,6 +2426,7 @@ def validate_network_resources(db, vdc_dbid, vdc_row, resources, class_id, reser
                 return "failed"
         return "success"
     except:
+        print sys.exc_info()
         cloud_utils.log_exception(sys.exc_info())
     return "failed"
 
@@ -2510,9 +2511,11 @@ def validate_compute_resources(db, vdc_dbid, vdc_row, resources, class_id, reser
                                         "%s - Insufficient compute network resources (Mbps). Class: %s Allocated: %s Deployed: %s Available: %s Needed: %s "
                                         % (vdc_row["name"], class_name, allocated["Network"], deployed["Network"],
                                            available["Network"], resources["network"]), type="Warn")
+            print "FAILING"
             return "failed"
         return "success"
     except:
+        print sys.exc_info()
         cloud_utils.log_exception(sys.exc_info())
     return "failed"
 
@@ -2998,7 +3001,8 @@ def get_throughputs(db, options):
 
 def id2name(db, dbid):
     if dbid:
-        entity = cache_utils.get_cache("db|tblEntities|id|%s" % dbid, None, db_in=db)
+        #entity = cache_utils.get_cache("db|tblEntities|id|%s" % dbid, None, db_in=db) TODO why does this not work
+        entity = db.get_row_dict("tblEntities", {"id": dbid})
         if entity:
             return entity["name"]
     return "Default"

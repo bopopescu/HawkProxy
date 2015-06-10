@@ -1164,22 +1164,41 @@ def validate(ent_uuid, acls):
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "validate"}
-    #start_status = entity.entity_commands.entity_commands(cloudDB, row["id"], options=command_options)
     return api_actions.validate_vdc(cloudDB, row["id"], command_options, row)
 
-def reserve_resources(ent_uuid, acls):
+def reserve_resources(ent_uuid, acls, return_object):
     #TODO forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "reserve-resources"}
-    return api_actions.reserve_resources(cloudDB, row["id"], command_options, row)
+    return api_actions.reserve_resources(cloudDB, row["id"], command_options, row, return_obj=return_object)
 
-def provision(ent_uuid, acls):
+def provision(ent_uuid, acls, return_object): #flag for async
     #TODO Forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "provision"}
-    return api_actions.provision(cloudDB, row["id"], command_options, row)
+    #api_actions.prov2(cloudDB, row["id"], command_options, row)
+    return api_actions.provision(cloudDB, row["id"], command_options, row, return_obj=return_object)
+
+def activate(ent_uuid, acls, return_object):
+    #check that the vdc is in the proper state, eg provisioned
+    # if entity["entitystatus"].lower() == "suspended":
+    #     dashboard.update_vdc_entitystatus(db, "Resuming")
+    #     dashboard.register_event(db)
+    #     status = resume_vdc(db, return_object)
+    #
+    # elif entity["entitystatus"].lower() == "provisioned":
+    #     status = activate_vdc(db, return_object)
+    # else:
+    #     dashboard.final(db, "Please retry", "error")
+    #     cloud_utils.log_message(db, dbid, "%s: Unable to process command due to current state: %s" %
+    #                             (entity["name"], entity["entitystatus"]), type="Warn")
+    row = get_spec_details(ent_uuid, acls)
+    row = dict_keys_to_lower(row)
+    command_options = {"command": "activate"}
+
+    return api_actions.activate(cloudDB, return_obj=return_object)
 
 def special_action(ent_type, split, reqm, acls, userData, post_data):
     print "RUNNING_ACTION: " + str(post_data) + " " + str(split) + " " + reqm
@@ -1197,24 +1216,44 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
                 return "ERROR: Failed to parse post data in action request"
             command = data.popitem()[0]
             if command == "reserve-resources":
-                if validate(ent_uuid, acls) == "success": #validates once
-                    result = reserve_resources(ent_uuid, acls)
+                validation = validate(ent_uuid, acls)
+                valid = validation["status"]
+                if valid == "success": #validates once
+                    result = reserve_resources(ent_uuid, acls, validation["return_object"])
                     return {command: result}
                 else:
                     log.error("VDC failed validation")
-                pass
+                    return {command: "failed"}
             elif command == "provision":
-                if validate(ent_uuid, acls) == "success": #validates once
-                    if reserve_resources(ent_uuid, acls) == "success":
-                        result = provision(ent_uuid, acls)
+                validation = validate(ent_uuid, acls)
+                valid = validation["status"]
+                if valid == "success": #validates once
+                    if reserve_resources(ent_uuid, acls, validation["return_object"]) == "success":
+                        result = provision(ent_uuid, acls, validation["return_object"])
                         return {command: result}
                     else:
                         log.error("VDC failed resource allocation")
+                        return {"reserve-resources": "failed"}
                 else:
                     log.error("VDC failed validation")
-                pass
+                    return {"validate": "failed"}
             elif command == "activate":
-                pass
+                validation = validate(ent_uuid, acls)
+                valid = validation["status"]
+                if valid == "success": #validates once
+                    if reserve_resources(ent_uuid, acls, validation["return_object"]) == "success":
+                        if provision(ent_uuid, acls, validation["return_object"]) == "success":
+                            result = activate(ent_uuid, acls, validation["return_object"])
+                            return {command: result}
+                        else:
+                            log.error("VDC failed provisioning")
+                            return {"provision": "failed"}
+                    else:
+                        log.error("VDC failed resource allocation")
+                        return {"reserve-resources": "failed"}
+                else:
+                    log.error("VDC failed validation")
+                    return {"validate": "failed"}
             elif command == "deprovision":
                 pass
     return False

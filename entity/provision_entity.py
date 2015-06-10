@@ -836,7 +836,6 @@ def provision_vdc(db, return_object, vdc_progress=100):
                 cloud_utils.log_message(db, dbid, "%s: Unable to find any suitable slice" % entity["name"], type="Warn")
                 dashboard.final(db, "No suitable slice availableat this time. Please try again ", "error")
                 return "failed"
-
         name, status = check_slice_status(db, dbid, entity["selectedsliceentityid"])
         if not status:
             dashboard.update_vdc_entitystatus(db, "Ready")
@@ -895,6 +894,7 @@ def provision_vdc(db, return_object, vdc_progress=100):
 
         return status
     except:
+        print sys.exc_info()
         cloud_utils.log_exception(sys.exc_info())
 
 
@@ -976,6 +976,7 @@ def provision_vdc_manager(db, event_object, vdc_progress=100):
         dashboard.vdc_progress += ((1 * 80 * vdc_progress) / ((dashboard.vdc_services_count + 1) * 100))
         return result["return_status"]
     except:
+        print sys.exc_info()
         cloud_utils.log_exception(sys.exc_info())
 
 

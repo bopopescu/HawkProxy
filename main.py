@@ -517,6 +517,9 @@ def get_spec_details(obj_uuid, obj_type, acls, canSeeDetails=False):
         print "BLANK DETAILS" + obj_uuid
     return details
 
+def get_spec_details_with_parent_id(ent_type, name, parent_id):
+    return cloudDB.get_row_dict("tblEntities", {"EntityType": ent_type, "Name": name, "ParentEntityId": parent_id})
+
 
 def get_all_parents(obj_ent_id, array):
     # Array will be array of parents
@@ -724,8 +727,8 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             except KeyError:
                 imgname = ""
             libraryrow = cloudDB.get_row_dict("tblEntities", {"EntityType": "imagelibrary", "Name": libname})
-            imagerow = cloudDB.get_row_dict("tblEntities", {"EntityType": "image", "Name": imgname,
-                                                            "ParentEntityId": libraryrow["id"]})
+            imagerow = get_spec_details_with_parent_id("image", imgname, libraryrow["id"])
+
             try:
                 options.update({"cpuvcpu": data["cpu"][0]})
             except KeyError:
@@ -748,8 +751,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                     })
                 if "boot_volume" in data["server_boot"].viewkeys():
                     if "volume_name" in data["server_boot"]["boot_volume"].viewkeys():
-                        boot_volume_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "volume", "Name": data["server_boot"]["boot_volume"]["volume_name"],
-                                                                "ParentEntityId": vdc_details["id"]})
+                        boot_volume_row = get_spec_details_with_parent_id("volume", data["server_boot"]["boot_volume"]["volume_name"], vdc_details["id"])
                         attached_entities.append({
                             "entitytype": "volume", #TODO was volume_boot before
                             "entities": [
@@ -760,7 +762,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                         })
             if "volumes" in data.viewkeys() and isinstance(data["volumes"], list):
                 for vol in data["volumes"]:
-                    volume_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "volume", "Name": vol["volume_name"], "ParentEntityId": vdc_details["id"]})
+                    volume_row = get_spec_details_with_parent_id("volume", vol["volume_name"], vdc_details["id"])
                     attached_entities.append({
                         "entitytype": "volume",
                         "entities": [
@@ -773,7 +775,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                 options.update({"metadata" : data["metadata"]})
             if "nat" in data.viewkeys() and isinstance(data["nat"], list):
                 for nat in data["nat"]:
-                    nat_row = cloudDB.get_row_dict("tblEntities", {"EntityType": "nat_network_service", "Name": nat["volume_name"], "ParentEntityId": vdc_details["id"]})
+                    nat_row = get_spec_details_with_parent_id("nat_network_service", nat["volume_name"], vdc_details["id"])
                     attached_entities.append({
                         "entitytype": "nat_network_service",
                         "entities": [
@@ -787,7 +789,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
         elif obj_type == "container":
             if "storage_class" in data.viewkeys():
                 storage_class_name = data["storage_class"]
-                db_row = cloudDB.get_row_dict("tblEntities", {"EntityType": obj_type, "Name": storage_class_name, "ParentEntityId": vdc_details["id"]})
+                db_row = get_spec_details_with_parent_id(ent_type=obj_type, name=storage_class_name, parent_id=vdc_details["id"])
                 if data["datareduction"] == "None":
                     contype = "Regular"
                 else:
@@ -874,9 +876,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             options.update({"servicetype": "externalNetwork",
                             "entitytype": obj_type, })
         elif obj_type == "compute_network_service":
-            server_farm_row = cloudDB.get_row_dict("tblEntities",
-                                                   {"EntityType": "serverfarm", "ParentEntityId": vdc_details["id"],
-                                                    "Name": data["serverfarm"][0]})
+            server_farm_row = get_spec_details_with_parent_id("serverfarm", data["serverfarm"][0], vdc_details["id"])
 
             try:
                 max_inst_count = data["params"]["max_instances_count"]

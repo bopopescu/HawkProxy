@@ -956,6 +956,16 @@ def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
         create_interfaces(formatted_post_data["name"], formatted_post_data["interfaces"], parent_vdc_details["id"])
     return entity_res
 
+def get_entity(obj_type, obj_uuid, details):
+    print details
+    print obj_type
+    print obj_uuid
+    slice_row = cloudDB.get_row("tblSlices", "tblEntities='28'")
+    slice_row_lower = utils.cloud_utils.lower_key(slice_row)
+    ent = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
+    ent._status(cloudDB, do_get=True)
+    return ent.row
+
 def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row):
     # print ent_type
     # print parent_uuid
@@ -1136,6 +1146,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 RES_CODE = "202 Accepted"
         elif reqm == "GET":
             r = rest.get_rest(UA + spec_uri, headers)
+            #entity_res = get_entity(obj_type, obj_uuid, details, slice_row_lower)
             entity_res = json.dumps({"uuid": details["UniqueId"]})
             RES_CODE = "200 OK"
         elif reqm == "DELETE":
@@ -1393,7 +1404,8 @@ def request_api(addr, userData, reqm, post_data):
                                 print details["EntityType"]
                                 print split[0]
                                 return False
-                        return get_dict_details(details)
+                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        #return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
@@ -1443,7 +1455,8 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in split[0]:
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_dict_details(details)
+                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        #return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
@@ -1513,7 +1526,8 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in split[0]:
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_dict_details(details)
+                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        #return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
@@ -1586,7 +1600,8 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in split[0]:
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_dict_details(details)
+                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        #return get_dict_details(details)
 
     return False
 

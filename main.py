@@ -1049,10 +1049,10 @@ def convert_obj_cont_name(obj_type):
         obj_cont_name = "ExternalNetwork"
     elif obj_type == "compute-services":
         obj_cont_name = "ComputeService"
-    elif obj_type == "vdcs":
+    elif obj_type == "vdcs" or obj_type == "departments":
         obj_cont_name = "Vdc"
     else:
-        return "ERROR: Invalid entity type desired"
+        return "ERROR: Invalid entity type desired: " + obj_type
     return obj_cont_name
 
 
@@ -1217,12 +1217,12 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         except:
             # print sys.exc_info()
             if reqm != "DELETE" and obj_type != "network_interface":
-                return "ERROR: Incorrect/Empty CDF Response: " + str(r)
+                return "ERROR: Incorrect/Empty CFD Response: " + str(r)
 
         print entity_res
-        comp_res = {"CDF": r, "HAWK-DB": json.loads(entity_res)}
+        comp_res = {"CFD": r, "HAWK-DB": json.loads(entity_res)}
         return comp_res
-        # return "CDF RESPONSE:\n" + json.dumps(r, sort_keys=True, indent=4, separators=(',', ': ')) + "\nHAWK-DB RESPONSE:\n" + str(entity_res)
+        # return "CFD RESPONSE:\n" + json.dumps(r, sort_keys=True, indent=4, separators=(',', ': ')) + "\nHAWK-DB RESPONSE:\n" + str(entity_res)
 
     return False
 
@@ -1298,7 +1298,10 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
         command = data.popitem()[0]
         if command == "validate":
             validation = validate(ent_uuid, acls)
-            return {command: validation["status"], "validation": validation["resources"]}
+            if "resources" in validation.viewkeys():
+                return {command: validation["status"], "validation": validation["resources"]}
+            elif "resource_state" in validation.viewkeys():
+                return {command: validation["status"], "validation": validation["resource_state"]}
         elif command == "reserve-resources":
             validation = validate(ent_uuid, acls)
             result = reserve_resources(ent_uuid, acls, validation["return_object"])
@@ -1434,7 +1437,7 @@ def request_api(addr, userData, reqm, post_data):
                 if split[0] == "organizations":
                     object_type = "organization"
                 elif split[0] == "external-networks":
-                    object_type = "slice_attached_network"
+                    object_type = "externalnetwork"
                 elif split[0] == "image-libraries":
                     object_type = "imagelibrary"
                 else:
@@ -1448,7 +1451,7 @@ def request_api(addr, userData, reqm, post_data):
                     details = load_ent_details(split[1])
                     if len(split) < 3:  # details about one thing like departments/uuid
                         if details["EntityType"] not in split[0]:
-                            if not (details["EntityType"] == "slice_attached_network" and split[
+                            if not (details["EntityType"] == "externalnetwork" and split[
                                 0] == "external-networks"):
                                 # makes sure you cant ask dept details and give vdc uuid.
                                 print details["EntityType"]
@@ -1697,6 +1700,7 @@ class OutputManager(object):  # TODO Format json
 
 
 def serve(env, start_response):
+    log.info("Serving! " + str(env))
     oman = OutputManager()
     global RES_CODE
     path = env['PATH_INFO']

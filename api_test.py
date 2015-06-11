@@ -2,6 +2,7 @@ __author__ = 'vkoro_000'
 
 import requests
 import ujson as json
+import time
 
 admin_token = "fd01bd1ad68847d1bed4b3127376a9cc"
 osa_token = "255f300cc33646e7afed8c60bb8462d3"
@@ -22,7 +23,7 @@ def get_req(url):
     return requests.get(url, headers=head)
 
 def provision(url):
-    r = post_req(url + "/actions", {"provision": "null"})
+    r = put_req(url + "/actions", {"provision": "null"})
     stat = ""
     while stat != "Provisioned":
         r = get_req(url)
@@ -39,7 +40,7 @@ def provision(url):
     return stat
 
 def activate(url):
-    r = post_req(url + "/actions", {"activate": "null"})
+    r = put_req(url + "/actions", {"activate": "null"})
     stat = ""
     while stat != "Active":
         r = get_req(url)
@@ -55,7 +56,12 @@ def activate(url):
         print url + ": " + stat
     return stat
 
+def deprovision(url):
+    r = put_req(url + "/actions", {"deprovision": "null"})
+    return r.text
 
+starttime = time.clock()
+print "BEGIN ENTITY CREATION"
 r = post_req(URL + "departments/" + department_uuid + "/vdcs", {"Name": "Vadim-VDC_auto"})
 vdc_uuid = json.loads(r.text)["HAWK-DB"]["UUID"]
 
@@ -83,13 +89,18 @@ r = put_req(URL + "server-farms/" + serverfarm_uuid, {"name":"Cluster-1","min":1
 # ext_uuid = "a8a6f5ee-3333-465a-ae70-7f3361ab2b26"
 # compute_uuid = "4f41a82b-723a-4f54-a558-93437a928c0c"
 
-r = post_req(URL + "vdcs/" + vdc_uuid + "/actions", {"validate": "null"})
-str = ""
-while str != "Reserved":
-    r = post_req(URL + "vdcs/" + vdc_uuid + "/actions", {"validate": "null"})
-    str = json.loads(r.text)["validation"]
+print "CREATION/CONFIGURATION OF ENTITIES COMPLETE"
 
-r = post_req(URL + "vdcs/" + vdc_uuid + "/actions", {"reserve-resources": "null"})
+r = put_req(URL + "vdcs/" + vdc_uuid + "/actions", {"validate": "null"})
+stri = ""
+while stri != "Reserved":
+    r = put_req(URL + "vdcs/" + vdc_uuid + "/actions", {"validate": "null"})
+    stri = json.loads(r.text)["validation"]
+    print "Validating: " + stri
+
+print "RESERVING RESOURCES"
+r = put_req(URL + "vdcs/" + vdc_uuid + "/actions", {"reserve-resources": "null"})
+print "RESOURCES RESERVED"
 
 print "PROV VDC: " + provision(URL + "vdcs/" + vdc_uuid)
 print "PROV NAT: " + provision(URL + "nats/" + nat_uuid)
@@ -98,7 +109,8 @@ print "PROV COMPUTE: " + provision(URL + "compute-services/" + compute_uuid)
 
 print "ACTIVATE VDC: " + activate(URL + "vdcs/" + vdc_uuid)
 
-#
-# REM curl -s -S -i -X POST http://localhost:8091/v2/vdcs/%vdc_uuid%/actions -d "{\"activate\":\"null\"}" --header "X-Auth-Token: %admin_token%" --header "Content-Type: application/json"
-#
-# REM curl -s -S -i -X POST http://localhost:8091/v2/vdcs/5ac6ea76-fdee-4b7f-b91a-369ae1c07d83/actions -d "{\"deprovision\":\"null\"}" --header "X-Auth-Token: %admin_token%" --header "Content-Type: application/json"
+endtime = time.clock()
+elapsedtime = endtime - starttime
+print "COMPLETE ACTIVATION TOOK: " + str(elapsedtime) + " seconds."
+
+print "DEPROVISION VDC: " + deprovision(URL + "vdcs/" + vdc_uuid)

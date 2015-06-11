@@ -1106,7 +1106,7 @@ def convert_obj_type_to_db(obj_type):
     else:
         return "ERROR: Invalid entity type desired"
     return obj_type
-
+#TODO RES_CODE EVERYWHERE!!!!!
 
 def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
     global RES_CODE
@@ -1182,10 +1182,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 RES_CODE = "201 Created"
                 # ent = EntityFunctions(db=cloudDB, dbid=0)
                 # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
-        elif reqm == "PUT":  # TODO How to handle provisioining/deprovisioning?
-            # if obj_type == "vdc":
-            # provision here
-            # pass
+        elif reqm == "PUT":
             r = rest.put_rest(UA + spec_uri, data, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
                 # options = data
@@ -1200,10 +1197,11 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 entity_res = update_entity(obj_type, VDC["UniqueId"], VDC, data, slice_row_lower)
                 RES_CODE = "202 Accepted"
         elif reqm == "GET":
+            RES_CODE = "200 OK"
             r = rest.get_rest(UA + spec_uri, headers)
             #entity_res = get_entity(obj_type, obj_uuid, details, slice_row_lower)
             entity_res = json.dumps({"uuid": details["UniqueId"]})
-            RES_CODE = "200 OK"
+            return format_details(get_entity(details["EntityType"], details["UniqueId"], details))
         elif reqm == "DELETE":
             r = rest.delete_rest(UA + spec_uri, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
@@ -1285,7 +1283,7 @@ def deprovision(ent_uuid, acls):
 def special_action(ent_type, split, reqm, acls, userData, post_data):
     print "RUNNING_ACTION: " + str(post_data) + " " + str(split) + " " + reqm
     ent_uuid = split[1]
-    if reqm == "POST":
+    if reqm == "PUT":
         obj_type = convert_obj_type_to_db(ent_type)
         try:
             data = json.loads(str(post_data))
@@ -1363,7 +1361,6 @@ def get_dict_details(details):
     return {details["EntityType"]: dicto}
 
 def format_details(details):
-    print details
     details = dict_keys_to_lower(details)
     dicto = {}
     for item in details.iteritems():
@@ -1408,7 +1405,7 @@ def request_api(addr, userData, reqm, post_data):
                     return special_process(part, split, reqm, acls, userData, post_data)
         if part in specific_action_addresses and len(split) < 3:
             return special_process(part, split, reqm, acls, userData, post_data)
-        if "vdcs" in part and (reqm == "PUT" or reqm == "DELETE"):
+        if "vdcs" in part and (reqm == "PUT" or reqm == "DELETE") and len(split) < 3:
             return special_process(part, split, reqm, acls, userData, post_data)
 
     if addr == '/listAll' and reqm == "GET":

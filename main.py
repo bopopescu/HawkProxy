@@ -1004,6 +1004,110 @@ def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
     entity.entity_commands.update_multiple(cloudDB, ent.row["id"], options)
     return res
 
+def convert_obj_cont_name(obj_type):
+    if obj_type == "subnets":
+        obj_cont_name = "Subnet"
+    elif obj_type == "nats":
+        obj_cont_name = "Nat"
+    elif obj_type == "external-networks":  # TODO ?!?!?!?!! does this mean to say external-network-service
+        obj_cont_name = "ExternalNetwork"
+    elif obj_type == "firewalls":
+        obj_cont_name = "Firewall"
+    elif obj_type == "load-balancers":
+        obj_cont_name = "LoadBalancer"
+    elif obj_type == "routers":
+        obj_cont_name = "Router"
+    elif obj_type == "vpns":
+        obj_cont_name = "VPN"
+    elif obj_type == "monitors":
+        obj_cont_name = "Monitor"
+    elif obj_type == "server-farms":
+        obj_cont_name = "ServerFarm"
+    elif obj_type == "servers":
+        obj_cont_name = "Server"
+    elif obj_type == "containers":
+        obj_cont_name = "Container"
+    elif obj_type == "volumes":
+        obj_cont_name = "Volume"
+    elif obj_type == "security-groups":
+        obj_cont_name = "SecurityGroup"
+    elif obj_type == "security-rules":
+        obj_cont_name = "SecurityRule"
+    elif obj_type == "acl-groups":
+        obj_cont_name = "AccessGroup"
+    elif obj_type == "acl-rules":
+        obj_cont_name = "AccessRule"
+    elif obj_type == "load-balancer-groups":
+        obj_cont_name = "LbsGroup"
+    elif obj_type == "load-balancer-services":
+        obj_cont_name = "LbsService"
+    elif obj_type == "vpn-groups":
+        obj_cont_name = "VpnGroup"
+    elif obj_type == "ipsec-tunnels":
+        obj_cont_name = "VpnConnection"
+    elif obj_type == "external-network-services":
+        obj_cont_name = "ExternalNetwork"
+    elif obj_type == "compute-services":
+        obj_cont_name = "ComputeService"
+    elif obj_type == "vdcs":
+        obj_cont_name = "Vdc"
+    else:
+        return "ERROR: Invalid entity type desired"
+    return obj_cont_name
+
+
+def convert_obj_type_to_db(obj_type):
+    if obj_type == "subnets":
+        obj_type = "switch_network_service"
+    elif obj_type == "nats":
+        obj_type = "nat_network_service"
+    elif obj_type == "external-networks":  # TODO ?!?!?!?!! does this mean to say external-network-service
+        obj_type = "externalnetwork"
+    elif obj_type == "firewalls":
+        obj_type = "fws_network_service"
+    elif obj_type == "load-balancers":
+        obj_type = "lbs_network_service"
+    elif obj_type == "routers":
+        obj_type = "rts_network_service"
+    elif obj_type == "vpns":
+        obj_type = "ipsecvpn_network_service"
+    elif obj_type == "monitors":
+        obj_type = "nms_network_service"
+    elif obj_type == "server-farms":
+        obj_type = "serverfarm"
+    elif obj_type == "servers":
+        obj_type = "server"
+    elif obj_type == "containers":
+        obj_type = "container"
+    elif obj_type == "volumes":
+        obj_type = "volume"
+    elif obj_type == "security-groups":
+        obj_type = "security_group"
+    elif obj_type == "security-rules":
+        obj_type = "security_rule"
+    elif obj_type == "acl-groups":
+        obj_type = "acl_group"
+    elif obj_type == "acl-rules":
+        obj_type = "acl_rule"
+    elif obj_type == "load-balancer-groups":
+        obj_type = "lbs-group"
+    elif obj_type == "load-balancer-services":
+        obj_type = "lbs_service"
+    elif obj_type == "vpn-groups":
+        obj_type = "vpn_group"
+    elif obj_type == "ipsec-tunnels":
+        obj_type = "ipsecvpn_network_service"
+    elif obj_type == "external-network-services":
+        obj_type = "externalnetwork"  # LOL Confusing
+    elif obj_type == "compute-services":
+        obj_type = "compute_network_service"  # LOL Confusing
+    elif obj_type == "vdcs" or obj_type == "departments":
+        obj_type = "vdc"
+    else:
+        return "ERROR: Invalid entity type desired"
+    return obj_type
+
+
 def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
     global RES_CODE
 
@@ -1026,80 +1130,8 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
             return "ERROR: Entity name was not provided"
 
     if reqm == "POST" or reqm == "PUT" or reqm == "GET" or reqm == "DELETE":
-        if obj_type == "subnets":
-            obj_type = "switch_network_service"
-            obj_cont_name = "Subnet"
-        elif obj_type == "nats":
-            obj_type = "nat_network_service"
-            obj_cont_name = "Nat"
-        elif obj_type == "external-networks":  # TODO ?!?!?!?!! does this mean to say external-network-service
-            obj_type = "externalnetwork"
-            obj_cont_name = "ExternalNetwork"
-        elif obj_type == "firewalls":
-            obj_type = "fws_network_service"
-            obj_cont_name = "Firewall"
-        elif obj_type == "load-balancers":
-            obj_type = "lbs_network_service"
-            obj_cont_name = "LoadBalancer"
-        elif obj_type == "routers":
-            obj_type = "rts_network_service"
-            obj_cont_name = "Router"
-        elif obj_type == "vpns":
-            obj_type = "ipsecvpn_network_service"
-            obj_cont_name = "VPN"
-        elif obj_type == "monitors":
-            obj_type = "nms_network_service"
-            obj_cont_name = "Monitor"
-        elif obj_type == "server-farms":
-            obj_type = "serverfarm"
-            obj_cont_name = "ServerFarm"
-        elif obj_type == "servers":
-            obj_type = "server"
-            obj_cont_name = "Server"
-        elif obj_type == "containers":
-            obj_type = "container"
-            obj_cont_name = "Container"
-        elif obj_type == "volumes":
-            obj_type = "volume"
-            obj_cont_name = "Volume"
-        elif obj_type == "security-groups":
-            obj_type = "security_group"
-            obj_cont_name = "SecurityGroup"
-        elif obj_type == "security-rules":
-            obj_type = "security_rule"
-            obj_cont_name = "SecurityRule"
-        elif obj_type == "acl-groups":
-            obj_type = "acl_group"
-            obj_cont_name = "AccessGroup"
-        elif obj_type == "acl-rules":
-            obj_type = "acl_rule"
-            obj_cont_name = "AccessRule"
-        elif obj_type == "load-balancer-groups":
-            obj_type = "lbs-group"
-            obj_cont_name = "LbsGroup"
-        elif obj_type == "load-balancer-services":
-            obj_type = "lbs_service"
-            obj_cont_name = "LbsService"
-        elif obj_type == "vpn-groups":
-            obj_type = "vpn_group"
-            obj_cont_name = "VpnGroup"
-        elif obj_type == "ipsec-tunnels":
-            obj_type = "ipsecvpn_network_service"
-            obj_cont_name = "VpnConnection"
-        # elif obj_type == "interfaces":
-        #     obj_type = "network_interface"
-        #     obj_cont_name = "Interface"
-        elif obj_type == "external-network-services":
-            obj_type = "externalnetwork"  # LOL Confusing
-            obj_cont_name = "ExternalNetwork"
-        elif obj_type == "compute-services":
-            obj_type = "compute_network_service"  # LOL Confusing
-            obj_cont_name = "ComputeService"
-        elif obj_type == "vdcs" or obj_type == "departments":
-            obj_type = "vdc"
-            obj_cont_name = "Vdc"
-        else:
-            return "ERROR: Invalid entity type desired"
+        obj_cont_name = convert_obj_cont_name(obj_type)
+        obj_type = convert_obj_type_to_db(obj_type)
 
         slice_row = cloudDB.get_row("tblSlices", "tblEntities='28'")
         slice_row_lower = utils.cloud_utils.lower_key(slice_row)
@@ -1203,7 +1235,11 @@ def validate(ent_uuid, acls):
     r = rest.put_rest(UA + vdc_uri, {"command": "reserve-resources"})
     get_entity("vdc", ent_uuid, row)
     # r2 = rest.get_rest(UA + vdc_uri)
-    hawk_validation.update({"resources": r["resources"]})
+    print r
+    if "resources" in r.viewkeys():
+        hawk_validation.update({"resources": r["resources"]})
+    else:
+        hawk_validation.update({"resource_state": r["resource_state"]["state"]})
     return hawk_validation
 
 def reserve_resources(ent_uuid, acls, return_object):
@@ -1250,54 +1286,34 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
     print "RUNNING_ACTION: " + str(post_data) + " " + str(split) + " " + reqm
     ent_uuid = split[1]
     if reqm == "POST":
-        if ent_type == "vdcs":
-            obj_type = "vdc"
-            try:
-                data = json.loads(str(post_data))
-                data = dict_keys_to_lower(data)
-                if len(data) == 0:
-                    return False
-            except:
-                print sys.exc_info()
-                return "ERROR: Failed to parse post data in action request"
-            command = data.popitem()[0]
-            if command == "validate":
-                validation = validate(ent_uuid, acls)
-                return {command: validation["status"], "resources": validation["resources"]}
-            elif command == "reserve-resources":
-                validation = validate(ent_uuid, acls)
-                valid = validation["status"]
-                if valid == "success": #validates once
-                    result = reserve_resources(ent_uuid, acls, validation["return_object"])
-                    return {command: result}
-                else:
-                    log.error("VDC failed validation")
-                    return {command: "failed"}
-            elif command == "provision":
-                validation = validate(ent_uuid, acls)
-                valid = validation["status"]
-                if valid == "success": #validates once
-                    if reserve_resources(ent_uuid, acls, validation["return_object"]) == "success":
-                        result = provision(ent_uuid, acls, validation["return_object"])
-                        return {command: result}
-                    else:
-                        log.error("VDC failed resource allocation")
-                        return {"reserve-resources": "failed"}
-                else:
-                    log.error("VDC failed validation")
-                    return {"validate": "failed"}
-            elif command == "activate":
-                validation = validate(ent_uuid, acls)
-                valid = validation["status"]
-                if valid == "success": #validates once
-                    result = activate(ent_uuid, acls, validation["return_object"])
-                    return {command: result}
-                else:
-                    log.error("VDC failed validation")
-                    return {"validate": "failed"}
-            elif command == "deprovision":
-                res = deprovision(ent_uuid, acls)
-                return {command: res}
+        obj_type = convert_obj_type_to_db(ent_type)
+        try:
+            data = json.loads(str(post_data))
+            data = dict_keys_to_lower(data)
+            if len(data) == 0:
+                return False
+        except:
+            print sys.exc_info()
+            return "ERROR: Failed to parse post data in action request"
+        command = data.popitem()[0]
+        if command == "validate":
+            validation = validate(ent_uuid, acls)
+            return {command: validation["status"], "validation": validation["resources"]}
+        elif command == "reserve-resources":
+            validation = validate(ent_uuid, acls)
+            result = reserve_resources(ent_uuid, acls, validation["return_object"])
+            return {command: result}
+        elif command == "provision":
+            validation = validate(ent_uuid, acls)
+            result = provision(ent_uuid, acls, validation["return_object"])
+            return {command: result}
+        elif command == "activate":
+            validation = validate(ent_uuid, acls)
+            result = activate(ent_uuid, acls, validation["return_object"])
+            return {command: result}
+        elif command == "deprovision":
+            res = deprovision(ent_uuid, acls)
+            return {command: res}
     return False
 
 
@@ -1385,9 +1401,9 @@ def request_api(addr, userData, reqm, post_data):
     for part in split:
         if part in duplicate_specific_action_addresses and len(split) > 1:
             if split[0] in duplicate_specific_action_addresses or split[1] in duplicate_specific_action_addresses:
-                if reqm != "GET":
+                if reqm != "GET" and len(split) < 3:
                     return special_process(part, split, reqm, acls, userData, post_data)
-        if part in specific_action_addresses:
+        if part in specific_action_addresses and len(split) < 3:
             return special_process(part, split, reqm, acls, userData, post_data)
         if "vdcs" in part and (reqm == "PUT" or reqm == "DELETE"):
             return special_process(part, split, reqm, acls, userData, post_data)

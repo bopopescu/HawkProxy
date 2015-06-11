@@ -4,6 +4,7 @@ import entity.validate_entity as validate
 import entity.provision_entity as prov
 import utils.cloud_utils
 import entity.entity_utils
+import entity.entity_functions
 # def validate_vdc_api_get_returnobj(db, dbid, options, ent_row):
 #     return_object = [{"options": options, "dbid": dbid,
 #                     "caller": validate_entity,
@@ -58,14 +59,17 @@ def reserve_resources(db, dbid, options, ent_row, return_obj=None):
 #     print return_object
 #     return prov.provision_vdc(db, return_object)
 
-def provision(db, dbid, options, ent_row):
+def provision(db, dbid, options, ent_row, return_object):
     # if return_obj is None:
     #     return_obj = validate_vdc(db, dbid, options, ent_row)["return_object"]
     # ent_row = return_obj[-1]["entity"]
     # vdc_progress = 100
     # return_obj[-1]["options"] = options
+    eve = entity.entity_functions.EntityFunctions(db, dbid, return_object=return_object, quick_provision=True)
+    status = eve.do(db, "command", options=options)
+    return status
 
-    return prov.provision_entity(db, dbid, options=options)
+    #return prov.provision_entity(db, dbid, options=options)
     # dashboard = return_obj[-1]["dashboard"]
     # status = prov.create_vdc_profiles(db, return_obj, vdc_progress=vdc_progress)
     # if status != "success":
@@ -89,9 +93,12 @@ def provision(db, dbid, options, ent_row):
     # dashboard.update_vdc_entitystatus(db, "Ready")
     # return status
 
-def activate(db, dbid, command_options):
+def activate(db, dbid, command_options, return_object):
     #return prov.activate_vdc(db, return_obj)
-    return prov.activate_entity(db, dbid, options=command_options)
+    eve = entity.entity_functions.EntityFunctions(db, dbid, return_object=return_object, quick_provision=True)
+    status = eve.do(db, "command", options=command_options)
+    return status
+    #return prov.activate_entity(db, dbid, options=command_options)
     #return prov.start_activate_vdc(return_obj)
 
 def deprovision(db, ent_id, command_options):

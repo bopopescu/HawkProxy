@@ -964,6 +964,7 @@ def get_entity(obj_type, obj_uuid, details):
     slice_row_lower = utils.cloud_utils.lower_key(slice_row)
     ent = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
     ent._status(cloudDB, do_get=True)
+    #return format_details(ent.row)
     return ent.row
 
 def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row):
@@ -1184,13 +1185,13 @@ def reserve_resources(ent_uuid, acls, return_object):
     command_options = {"command": "reserve-resources"}
     return api_actions.reserve_resources(cloudDB, row["id"], command_options, row, return_obj=return_object)
 
-def provision(ent_uuid, acls): #flag for async
+def provision(ent_uuid, acls, return_obj): #flag for async
     #TODO Forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "provision"}
     #api_actions.prov2(cloudDB, row["id"], command_options, row)
-    return api_actions.provision(cloudDB, row["id"], command_options, row)
+    return api_actions.provision(cloudDB, row["id"], command_options, row, return_obj)
 
 def activate(ent_uuid, acls, return_object):
     #check that the vdc is in the proper state, eg provisioned
@@ -1209,7 +1210,7 @@ def activate(ent_uuid, acls, return_object):
     row = dict_keys_to_lower(row)
     command_options = {"command": "activate"}
 
-    return api_actions.activate(cloudDB, row["id"], command_options)
+    return api_actions.activate(cloudDB, row["id"], command_options, return_object)
 
 def deprovision(ent_uuid, acls):
     row = get_spec_details(ent_uuid, acls)
@@ -1246,7 +1247,7 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
                 valid = validation["status"]
                 if valid == "success": #validates once
                     if reserve_resources(ent_uuid, acls, validation["return_object"]) == "success":
-                        result = provision(ent_uuid, acls)
+                        result = provision(ent_uuid, acls, validation["return_object"])
                         return {command: result}
                     else:
                         log.error("VDC failed resource allocation")
@@ -1258,16 +1259,8 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
                 validation = validate(ent_uuid, acls)
                 valid = validation["status"]
                 if valid == "success": #validates once
-                    if reserve_resources(ent_uuid, acls, validation["return_object"]) == "success":
-                        # if provision(ent_uuid, acls, validation["return_object"]) == "success":
-                        result = activate(ent_uuid, acls, validation["return_object"])
-                        return {command: result}
-                        # else:
-                        #     log.error("VDC failed provisioning")
-                        #     return {"provision": "failed"}
-                    else:
-                        log.error("VDC failed resource allocation")
-                        return {"reserve-resources": "failed"}
+                    result = activate(ent_uuid, acls, validation["return_object"])
+                    return {command: result}
                 else:
                     log.error("VDC failed validation")
                     return {"validate": "failed"}
@@ -1318,6 +1311,16 @@ def get_dict_details(details):
 
     dicto.update({"Name": details["Name"], "Description": details["Description"]})
     return {details["EntityType"]: dicto}
+
+def format_details(details):
+    print details
+    details = dict_keys_to_lower(details)
+    dicto = {}
+    for item in details.iteritems():
+        dicto.update({str(item[0]): str(item[1])})
+
+    dicto.update({"Name": details["name"], "Description": details["description"]})
+    return {details["entitytype"]: dicto}
 
 
 def get_uuid(ent_id):
@@ -1404,7 +1407,7 @@ def request_api(addr, userData, reqm, post_data):
                                 print details["EntityType"]
                                 print split[0]
                                 return False
-                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        return format_details(get_entity(details["EntityType"], details["UniqueId"], details))
                         #return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
@@ -1455,7 +1458,7 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in split[0]:
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        return get_entity(details["EntityType"], details["UniqueId"], details)
                         #return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
@@ -1526,7 +1529,7 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in split[0]:
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        return get_entity(details["EntityType"], details["UniqueId"], details)
                         #return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
@@ -1600,7 +1603,7 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in split[0]:
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_dict_details(details).update(get_entity(details["EntityType"], details["UniqueId"], details))
+                        return get_entity(details["EntityType"], details["UniqueId"], details)
                         #return get_dict_details(details)
 
     return False

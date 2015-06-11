@@ -1262,7 +1262,7 @@ class EntityFunctions(object):
                     rest_me = entity_utils.put_entity(options, self.row["entitytype"], url)
 
                     if options["command"] != "cancel":
-                        if self.check_status(db, rest_me, url, force_periodic=force_periodic):
+                        if self.check_status(db, rest_me, url, force_periodic=force_periodic, ignore_pending=self.quick_provision):
                             # if an error is detected
                             self._local_command(db, options)
                             return ujson.dumps({"result_code": rest_me.get("http_status_code", 500),

@@ -524,6 +524,10 @@ def get_spec_details_with_parent_id(ent_type, name, parent_id):
     return cloudDB.get_row_dict("tblEntities", {"EntityType": ent_type, "Name": name, "ParentEntityId": parent_id})
 
 
+def get_spec_details_with_entid(ent_id):
+    return cloudDB.get_row_dict("tblEntities", {"id": ent_id})
+
+
 def get_all_parents(obj_ent_id, array):
     # Array will be array of parents
     obj = cloudDB.get_row_dict("tblEntities", {"id": obj_ent_id})
@@ -709,6 +713,15 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                 options.update({"metadata" : data["metadata"]})
             if "ssh_keys" in data.viewkeys():
                 options.update({"ssh_keys" : data["ssh_keys"]})
+            if "compute_service" in data.viewkeys():
+                attached_compute_name = data["compute_service"]
+                compute_row = get_spec_details_with_parent_id("compute_network_service", attached_compute_name, vdc_details["id"])
+                if compute_row is not None:
+                    options.update({
+                        "attach_to": [
+                            compute_row["id"]
+                        ]
+                    })
             if "dynamic_option" in data.viewkeys():
                 options.update({
                     "scale_option": data["dynamic_option"],
@@ -718,10 +731,10 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                 })
                 policies = ["bandwidth", "ram", "cpu"]
                 for one in policies:
-                    if one in data["dynamic_options"].viewkeys():
+                    if one in data["dynamic_option"].viewkeys():
                         options.update({
-                            str(one) + "_red": data["dynamic_options"][one][0],
-                            str(one) + "_green": data["dynamic_options"][one][1]
+                            str(one) + "_red": data["dynamic_option"][one][0],
+                            str(one) + "_green": data["dynamic_option"][one][1]
                         })
         elif obj_type == "server":
             try:
@@ -949,17 +962,20 @@ def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
     options = generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create")
     ent = EntityFunctions(db=cloudDB, dbid=0, slice_row=s_row)
     entity_res = ent._create(cloudDB, options)
+    row = get_spec_details_with_entid(ent.dbid)
     ent.update_all_service_uris(cloudDB, r, slice_url=UA)
     update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row)
 
     if "interfaces" in formatted_post_data:
         create_interfaces(formatted_post_data["name"], formatted_post_data["interfaces"], parent_vdc_details["id"])
-    return entity_res
+    entity_res = json.loads(entity_res)
+    entity_res.update({"UUID": row["UniqueId"]})
+    return json.dumps(entity_res)
 
 def get_entity(obj_type, obj_uuid, details):
-    print details
-    print obj_type
-    print obj_uuid
+    # print details
+    # print obj_type
+    # print obj_uuid
     slice_row = cloudDB.get_row("tblSlices", "tblEntities='28'")
     slice_row_lower = utils.cloud_utils.lower_key(slice_row)
     ent = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
@@ -975,6 +991,9 @@ def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
     # print s_row
     # print generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create")
     # print get_spec_details_with_parent_id(ent_type, formatted_post_data["name"], parent_vdc_details["id"])
+    # print formatted_post_data["name"]
+    # print parent_vdc_details["id"]
+
     ent = EntityFunctions(db=cloudDB, dbid=get_spec_details_with_parent_id(ent_type, formatted_post_data["name"], parent_vdc_details["id"])["id"], slice_row=s_row)
     ent._status(cloudDB, generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create"), do_get=True)
     # print "ENTITY ROW: " + str(ent.row)
@@ -1096,12 +1115,14 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         if reqm == "POST" or reqm == "PUT":
             for field in columns:
                 try:
-                    print data[str(field["Field"]).lower()]
+                    #print
+                    data[str(field["Field"]).lower()]
                 except:
                     data.update({str(field["Field"]).lower(): None})
 
             try:
-                print data[str("description").lower()]
+                #print
+                data[str("description").lower()]
             except:
                 data.update({str("description").lower(): None})
 
@@ -1120,6 +1141,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 data.update(dictio)
             except KeyError:
                 pass
+            print data
 
         if reqm == "POST":
             r = rest.post_rest(UA + spec_uri, data, headers)
@@ -1143,7 +1165,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 # entity_res = entity._update(cloudDB, options)  # TODO This does not update throughputs
                 #
                 # entity.entity_commands.update_multiple(cloudDB, details["id"], options)
-                update_entity(obj_type, VDC["UniqueId"], VDC, data, slice_row_lower)
+                entity_res = update_entity(obj_type, VDC["UniqueId"], VDC, data, slice_row_lower)
                 RES_CODE = "202 Accepted"
         elif reqm == "GET":
             r = rest.get_rest(UA + spec_uri, headers)
@@ -1176,7 +1198,13 @@ def validate(ent_uuid, acls):
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "validate"}
-    return api_actions.validate_vdc(cloudDB, row["id"], command_options, row)
+    hawk_validation = api_actions.validate_vdc(cloudDB, row["id"], command_options, row)
+    vdc_uri = load_spec_uri(get_spec_details(ent_uuid, acls))
+    r = rest.put_rest(UA + vdc_uri, {"command": "reserve-resources"})
+    get_entity("vdc", ent_uuid, row)
+    # r2 = rest.get_rest(UA + vdc_uri)
+    hawk_validation.update({"resources": r["resources"]})
+    return hawk_validation
 
 def reserve_resources(ent_uuid, acls, return_object):
     #TODO forward to cfd
@@ -1233,7 +1261,10 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
                 print sys.exc_info()
                 return "ERROR: Failed to parse post data in action request"
             command = data.popitem()[0]
-            if command == "reserve-resources":
+            if command == "validate":
+                validation = validate(ent_uuid, acls)
+                return {command: validation["status"], "resources": validation["resources"]}
+            elif command == "reserve-resources":
                 validation = validate(ent_uuid, acls)
                 valid = validation["status"]
                 if valid == "success": #validates once

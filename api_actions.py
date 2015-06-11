@@ -67,6 +67,10 @@ def provision(db, dbid, options, ent_row, return_object):
     # return_obj[-1]["options"] = options
     eve = entity.entity_functions.EntityFunctions(db, dbid, return_object=return_object, quick_provision=True)
     status = eve.do(db, "command", options=options)
+    # rows = db.get_multiple_row("tblEntities", "EntityType='nat_network_service' AND ParentEntityId='%s'" % dbid)
+    # for row in rows:
+    #     eve = entity.entity_functions.EntityFunctions(db, row["id"], return_object=return_object, quick_provision=True)
+    #     eve.do(db, "command", options=options)
     return status
 
     #return prov.provision_entity(db, dbid, options=options)
@@ -97,6 +101,10 @@ def activate(db, dbid, command_options, return_object):
     #return prov.activate_vdc(db, return_obj)
     eve = entity.entity_functions.EntityFunctions(db, dbid, return_object=return_object, quick_provision=True)
     status = eve.do(db, "command", options=command_options)
+    # rows = db.get_multiple_row("tblEntities", "EntityType='nat_network_service' AND ParentEntityId='%s'" % dbid)
+    # for row in rows:
+    #     eve = entity.entity_functions.EntityFunctions(db, row["id"], return_object=return_object, quick_provision=True)
+    #     eve.do(db, "command", options=command_options)
     return status
     #return prov.activate_entity(db, dbid, options=command_options)
     #return prov.start_activate_vdc(return_obj)

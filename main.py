@@ -1062,7 +1062,7 @@ def convert_obj_type_to_db(obj_type):
     elif obj_type == "nats":
         obj_type = "nat_network_service"
     elif obj_type == "external-networks":  # TODO ?!?!?!?!! does this mean to say external-network-service
-        obj_type = "externalnetwork"
+        obj_type = "slice_attached_network"
     elif obj_type == "firewalls":
         obj_type = "fws_network_service"
     elif obj_type == "load-balancers":
@@ -1360,14 +1360,139 @@ def get_dict_details(details):
     dicto.update({"Name": details["Name"], "Description": details["Description"]})
     return {details["EntityType"]: dicto}
 
+def add_elements(things):
+    dicto = {"elements": []}
+    if things is None:
+        return dicto
+    if len(things) == 0:
+        return dicto
+    for thing in things:
+        onedic = {}
+        onedic.update({
+            "name": thing["Name"],
+            "uuid": thing["UniqueId"]
+        })
+        dicto["elements"].append(onedic)
+    dicto.update({
+        "type": things[0]["EntityType"],
+        "total": len(things)
+    })
+    return dicto
+
+def add_interfaces(things, addresses):
+    dicto = {"elements": []}
+    if things is None:
+        return dicto
+    if len(things) == 0:
+        return dicto
+    for thing in things:
+        addrs = {}
+        int_name = thing["name"]
+        for address in addresses:
+            net_name = address["network"] #TODO is network name the right thing here
+            if net_name == int_name:
+                addrs.update(address)
+                break
+        onedic = {}
+        onedic.update({
+            "name": int_name,
+            "addresses": addrs
+        })
+        dicto["elements"].append(onedic)
+    dicto.update({
+        "type": "interface",
+        "total": len(things)
+    })
+    return dicto
+
 def format_details(details):
+    print details
     details = dict_keys_to_lower(details)
     dicto = {}
-    for item in details.iteritems():
-        dicto.update({str(item[0]): str(item[1])})
+    dicto.update({
+            "name": details["name"],
+            "type": details["entitytype"],
+            "description": details["description"],
+            "uuid": details["uniqueid"]
+    })
 
-    dicto.update({"Name": details["name"], "Description": details["description"]})
-    return {details["entitytype"]: dicto}
+    #dicto.update({"Name": details["name"], "Description": details["description"]})
+    #return {details["entitytype"]: dicto}
+    if details["entitytype"] == "organization":
+        depts = add_elements(load_owned(details["id"], "department"))
+        imglibs = add_elements(load_owned(details["id"], "imagelibrary"))
+        virnets = add_elements(load_owned(details["id"], "virtual_network"))
+
+        dicto.update({
+            "location": details["location"],
+            "administrator-name": details["administrator"],
+            "email-address": details["email"],
+            "policies": {
+                "enable-flavors": details["flavors_enabled"],
+                "enable-multi-slice-vdcs": "???"
+            },
+            "created": str(details["created_at"]),
+            "resource_state": {
+                "state": details["entitystatus"]
+            },
+            "departments": depts,
+            "image-libraries": imglibs,
+            "virtual-networks": virnets
+        })
+    elif details["entitytype"] == "department":
+        vdcs = add_elements(load_owned(details["id"], "department"))
+        imglibs = add_elements(load_owned(details["id"], "imagelibrary"))
+        virnets = add_elements(load_owned(details["id"], "virtual_network"))
+        dicto.update({
+            "location": details["location"],
+            "administrator-name": details["administrator"],
+            "email-address": details["email"],
+            "created": str(details["created_at"]),
+            "resource_state": {
+                "state": details["entitystatus"]
+            },
+            "vdcs": vdcs,
+            "image-libraries": imglibs,
+            "virtual-networks": virnets
+        })
+    elif details["entitytype"] == "nat_network_service":
+        #TODO when deprovisioned, nat dissapears from cfd
+        spec_uri = load_spec_uri(details)
+        #print UA + spec_uri
+        r = rest.get_rest(UA+spec_uri)
+        if r["http_status_code"] != 200:
+            print "FAILED NAT GET " + str(r["http_status_code"])
+            for item in details.iteritems():
+                dicto.update({str(item[0]): str(item[1])})
+        else:
+            print "SUCCESSFUL NAT GET"
+            print json.dumps(r)
+            dicto.update({
+                "resource_state": {
+                    "state": details["entitystatus"]
+                },
+            })
+            #dicto.update(r)
+            if "params" in r.viewkeys():
+                dicto.update({"params": r["params"]})
+                dicto.update({"nat_address_type": r["params"]["external_address_type"]})
+                if r["params"]["external_address_type"] == "static":
+                    dicto.update({"nat_static_address": r["params"]["external_address"]})
+            if "interfaces" in r.viewkeys():
+                interfaces = r["interfaces"]
+                addresses = r["addresses"]
+                ints = add_interfaces(interfaces, addresses)
+                dicto.update({"interfaces": ints})
+            # dicto.update({
+            #     "pat_mode": details["pat_mode"]
+            # })
+            #if
+        #interfaces = add_elements()
+
+    else:
+        for item in details.iteritems():
+            dicto.update({str(item[0]): str(item[1])})
+    return dicto
 
 
 def get_uuid(ent_id):

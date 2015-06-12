@@ -32,6 +32,7 @@ def provision(url):
             details = details["CFD"]
         if len(details.viewkeys()) == 1:
             details = details[details.iterkeys().next()]
+        print details
         if "entitystatus" in details.viewkeys():
             stat = details["entitystatus"]
         else:
@@ -113,4 +114,4 @@ endtime = time.clock()
 elapsedtime = endtime - starttime
 print "COMPLETE ACTIVATION TOOK: " + str(elapsedtime) + " seconds."
 
-print "DEPROVISION VDC: " + deprovision(URL + "vdcs/" + vdc_uuid)
+#print "DEPROVISION VDC: " + deprovision(URL + "vdcs/" + vdc_uuid)

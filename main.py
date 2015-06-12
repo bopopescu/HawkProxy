@@ -549,7 +549,10 @@ def load_spec_uri(bottom_child_details):
     # get_all_parents(bottom_child_details["id"], res)
     # for parent in res:
     # print parent["EntityType"] + " " + str(parent["Name"])
-    return trim_uri(cloudDB.get_row_dict("tblUris", {"tblEntities": bottom_child_details["id"]})["uri"])
+    uri = cloudDB.get_row_dict("tblUris", {"tblEntities": bottom_child_details["id"]})
+    if uri is None:
+        return None
+    return trim_uri(uri["uri"])
 
 
 def dict_keys_to_lower(dict):
@@ -1379,7 +1382,7 @@ def add_elements(things):
     })
     return dicto
 
-def add_interfaces(things, addresses):
+def add_interfaces(things, addresses=None):
     dicto = {"elements": []}
     if things is None:
         return dicto
@@ -1387,23 +1390,45 @@ def add_interfaces(things, addresses):
         return dicto
     for thing in things:
         addrs = {}
-        int_name = thing["name"]
-        for address in addresses:
-            net_name = address["network"] #TODO is network name the right thing here
-            if net_name == int_name:
-                addrs.update(address)
-                break
         onedic = {}
-        onedic.update({
-            "name": int_name,
-            "addresses": addrs
-        })
+        int_name = thing["name"]
+
+        if addresses is not None:
+            for address in addresses:
+                net_name = address["network"] #TODO is network name the right thing here
+                if net_name == int_name:
+                    addrs.update(address)
+                    break
+            onedic.update({
+                "addresses": addrs
+            })
+
+        # onedic.update({
+        #     "name": int_name,
+        # })
+        onedic.update(thing)
+        if "uri" in onedic.viewkeys():
+            onedic.pop("uri")
+
         dicto["elements"].append(onedic)
     dicto.update({
         "type": "interface",
         "total": len(things)
     })
     return dicto
+
+def load_details_from_cfd(details):
+    spec_uri = load_spec_uri(details)
+    r = rest.get_rest(UA+spec_uri)
+    if r["http_status_code"] != 200:
+        print "FAILED GET " + str(r["http_status_code"])
+        return {"Error": "Entity not found in CFD", "successful": False}
+        # for item in details.iteritems():
+        #     dicto.update({str(item[0]): str(item[1])}) #TODO this is not good, can we look up details from db?
+    else:
+        d = {"successful": True}
+        d.update(r)
+        return d
 
 def format_details(details):
     print details
@@ -1415,6 +1440,12 @@ def format_details(details):
             "description": details["description"],
             "uuid": details["uniqueid"]
     })
+    if "entitystatus" in details.viewkeys():
+        dicto.update({
+            "resource_state": {
+                "state": details["entitystatus"]
+            },
+        })
 
     #dicto.update({"Name": details["name"], "Description": details["description"]})
     #return {details["entitytype"]: dicto}
@@ -1457,22 +1488,13 @@ def format_details(details):
         })
     elif details["entitytype"] == "nat_network_service":
         #TODO when deprovisioned, nat dissapears from cfd
-        spec_uri = load_spec_uri(details)
-        #print UA + spec_uri
-        r = rest.get_rest(UA+spec_uri)
-        if r["http_status_code"] != 200:
-            print "FAILED NAT GET " + str(r["http_status_code"])
-            for item in details.iteritems():
-                dicto.update({str(item[0]): str(item[1])})
-        else:
+        r = load_details_from_cfd(details)
+        if r["successful"]:
             print "SUCCESSFUL NAT GET"
             print json.dumps(r)
-            dicto.update({
-                "resource_state": {
-                    "state": details["entitystatus"]
-                },
-            })
             #dicto.update(r)
+            if "cfm" in r.viewkeys():
+                dicto.update({"cfm": r["cfm"]})
             if "params" in r.viewkeys():
                 dicto.update({"params": r["params"]})
                 dicto.update({"nat_address_type": r["params"]["external_address_type"]})
@@ -1483,11 +1505,91 @@ def format_details(details):
                 addresses = r["addresses"]
                 ints = add_interfaces(interfaces, addresses)
                 dicto.update({"interfaces": ints})
-            # dicto.update({
-            #     "pat_mode": details["pat_mode"]
-            # })
-            #if
-        #interfaces = add_elements()
+            dicto.update({
+                "pat_mode": details["nat_pat_mode"]
+            })
+        else:
+            return r
+    elif details["entitytype"] == "externalnetwork":
+        r = load_details_from_cfd(details)
+        if r["successful"]:
+            if "interfaces" in r.viewkeys():
+                interfaces = r["interfaces"]
+                ints = add_interfaces(interfaces)
+                dicto.update({"interfaces": ints})
+            if "params" in r.viewkeys():
+                dicto.update({"params": r["params"]})
+            if "cfm" in r.viewkeys():
+                dicto.update({"cfm": r["cfm"]})
+        else:
+            return r
+    elif details["entitytype"] == "fws_network_service":
+        r = load_details_from_cfd(details)
+        if r["successful"]:
+            if "interfaces" in r.viewkeys():
+                interfaces = r["interfaces"]
+                ints = add_interfaces(interfaces)
+                dicto.update({"interfaces": ints})
+            if "params" in r.viewkeys():
+                dicto.update({"params": r["params"]})
+            if "autoscale" in r.viewkeys():
+                dicto.update({"autoscale": r["autoscale"]})
+            if "cfm" in r.viewkeys():
+                dicto.update({"cfm": r["cfm"]})
+            dicto.update({
+                "provisioned": "???",
+                "deployed": "???",
+            })
+        else:
+            return r
+    elif details["entitytype"] == "lbs_network_service":
+        r = load_details_from_cfd(details)
+        if r["successful"]:
+            if "interfaces" in r.viewkeys():
+                interfaces = r["interfaces"]
+                addresses = r["addresses"]
+                ints = add_interfaces(interfaces, addresses)
+                dicto.update({"interfaces": ints})
+            if "params" in r.viewkeys():
+                dicto.update({"params": r["params"]})
+            if "autoscale" in r.viewkeys():
+                dicto.update({"autoscale": r["autoscale"]})
+            if "lbs_mode" in r.viewkeys():
+                dicto.update({"lbs_mode": r["lbs_mode"]})
+            if "cfm" in r.viewkeys():
+                dicto.update({"cfm": r["cfm"]})
+            dicto.update({
+                "provisioned": "???",
+                "deployed": "???",
+            })
+        else:
+            return r
+
+    elif details["entitytype"] == "rts_network_service":
+        r = load_details_from_cfd(details)
+        if r["successful"]:
+            if "interfaces" in r.viewkeys():
+                interfaces = r["interfaces"]
+                ints = add_interfaces(interfaces)
+                dicto.update({"interfaces": ints})
+            if "params" in r.viewkeys():
+                dicto.update({"params": r["params"]})
+            if "autoscale" in r.viewkeys():
+                dicto.update({"autoscale": r["autoscale"]})
+            dicto.update({
+                "provisioned": "???",
+                "deployed": "???",
+            })
+        else:
+            return r
+    # elif details["entitytype"] == "compute_network_service":
+    #     r = load_details_from_cfd(details)
+    #     if r["successful"]:
+    #         #dicto.update(r)
+    #         if "virtual_compute_pool" in r.viewkeys():
+    #             dicto.update({"virtual_compute_pool": r["virtual_compute_pool"]})
+    #     else:
+    #         return r
 
     else:
         for item in details.iteritems():

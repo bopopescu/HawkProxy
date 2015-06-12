@@ -21,7 +21,8 @@ import entity.entity_functions
 #     validate_vdc(db, return_object)
 #     return return_object
 
-def validate_vdc(db, dbid, options, ent_row): #TODO dont use global object, return dict of status, and the return_object
+def validate_vdc(db, dbid, options, ent_row):
+    #TODO figure out dashboard stuff for all of these functions
     ent_row["selectedsliceentityid"] = 0
     ent_row["child_id"] = ent_row["id"]
     _return_object = [{"options": options, "dbid": dbid,

@@ -569,6 +569,12 @@ def create_interface(beg_serv_name, end_serv_name, interface_specs, vdc_id):
     options = {}
     beggining_row = cloudDB.get_row_dict("tblEntities", {"Name": beg_serv_name, "ParentEntityId": vdc_id})
     ending_row = cloudDB.get_row_dict("tblEntities", {"Name": end_serv_name, "ParentEntityId": vdc_id})
+    if beggining_row["EntityType"] == "externalnetwork": #TODO is this right
+        log.error("Attempt to create interface starting at extnet")
+        return
+    # if beggining_row["EntityType"] != "switch_network_service" and ending_row["EntityType"] != "switch_network_service":
+    #     log.error("Attempt to create interface without at least one switch")
+    #     return
     print beg_serv_name
     print end_serv_name
     print beggining_row
@@ -1052,6 +1058,8 @@ def convert_obj_cont_name(obj_type):
         obj_cont_name = "ExternalNetwork"
     elif obj_type == "compute-services":
         obj_cont_name = "ComputeService"
+    elif obj_type == "virtual-networks":
+        obj_cont_name = "VirtualNetwork"
     elif obj_type == "vdcs" or obj_type == "departments":
         obj_cont_name = "Vdc"
     else:
@@ -1104,6 +1112,8 @@ def convert_obj_type_to_db(obj_type):
         obj_type = "externalnetwork"  # LOL Confusing
     elif obj_type == "compute-services":
         obj_type = "compute_network_service"  # LOL Confusing
+    elif obj_type == "virtual-networks":
+        obj_type = "virtual_network"
     elif obj_type == "vdcs" or obj_type == "departments":
         obj_type = "vdc"
     else:
@@ -1179,6 +1189,8 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
             print data
 
         if reqm == "POST":
+            print UA + spec_uri
+            print data
             r = rest.post_rest(UA + spec_uri, data, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
                 entity_res = create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower)
@@ -1402,10 +1414,6 @@ def add_interfaces(things, addresses=None):
             onedic.update({
                 "addresses": addrs
             })
-
-        # onedic.update({
-        #     "name": int_name,
-        # })
         onedic.update(thing)
         if "uri" in onedic.viewkeys():
             onedic.pop("uri")
@@ -1490,8 +1498,6 @@ def format_details(details):
         #TODO when deprovisioned, nat dissapears from cfd
         r = load_details_from_cfd(details)
         if r["successful"]:
-            print "SUCCESSFUL NAT GET"
-            print json.dumps(r)
             #dicto.update(r)
             if "cfm" in r.viewkeys():
                 dicto.update({"cfm": r["cfm"]})
@@ -1502,7 +1508,10 @@ def format_details(details):
                     dicto.update({"nat_static_address": r["params"]["external_address"]})
             if "interfaces" in r.viewkeys():
                 interfaces = r["interfaces"]
-                addresses = r["addresses"]
+                if "addresses" in r.viewkeys():
+                    addresses = r["addresses"]
+                else:
+                    addresses = None
                 ints = add_interfaces(interfaces, addresses)
                 dicto.update({"interfaces": ints})
             dicto.update({
@@ -1515,7 +1524,11 @@ def format_details(details):
         if r["successful"]:
             if "interfaces" in r.viewkeys():
                 interfaces = r["interfaces"]
-                ints = add_interfaces(interfaces)
+                if "addresses" in r.viewkeys():
+                    addresses = r["addresses"]
+                else:
+                    addresses = None
+                ints = add_interfaces(interfaces, addresses)
                 dicto.update({"interfaces": ints})
             if "params" in r.viewkeys():
                 dicto.update({"params": r["params"]})
@@ -1528,7 +1541,12 @@ def format_details(details):
         if r["successful"]:
             if "interfaces" in r.viewkeys():
                 interfaces = r["interfaces"]
-                ints = add_interfaces(interfaces)
+                print interfaces
+                if "addresses" in r.viewkeys():
+                    addresses = r["addresses"]
+                else:
+                    addresses = None
+                ints = add_interfaces(interfaces, addresses)
                 dicto.update({"interfaces": ints})
             if "params" in r.viewkeys():
                 dicto.update({"params": r["params"]})
@@ -1547,7 +1565,10 @@ def format_details(details):
         if r["successful"]:
             if "interfaces" in r.viewkeys():
                 interfaces = r["interfaces"]
-                addresses = r["addresses"]
+                if "addresses" in r.viewkeys():
+                    addresses = r["addresses"]
+                else:
+                    addresses = None
                 ints = add_interfaces(interfaces, addresses)
                 dicto.update({"interfaces": ints})
             if "params" in r.viewkeys():
@@ -1570,7 +1591,11 @@ def format_details(details):
         if r["successful"]:
             if "interfaces" in r.viewkeys():
                 interfaces = r["interfaces"]
-                ints = add_interfaces(interfaces)
+                if "addresses" in r.viewkeys():
+                    addresses = r["addresses"]
+                else:
+                    addresses = None
+                ints = add_interfaces(interfaces, addresses)
                 dicto.update({"interfaces": ints})
             if "params" in r.viewkeys():
                 dicto.update({"params": r["params"]})
@@ -1580,6 +1605,38 @@ def format_details(details):
                 "provisioned": "???",
                 "deployed": "???",
             })
+        else:
+            return r
+    elif details["entitytype"] == "ipsecvpn_network_service":
+        r = load_details_from_cfd(details)
+        if r["successful"]:
+            if "interfaces" in r.viewkeys():
+                interfaces = r["interfaces"]
+                if "addresses" in r.viewkeys():
+                    addresses = r["addresses"]
+                else:
+                    addresses = None
+                ints = add_interfaces(interfaces, addresses)
+                dicto.update({"interfaces": ints})
+            if "params" in r.viewkeys():
+                dicto.update({"params": r["params"]})
+        else:
+            return r
+    elif details["entitytype"] == "nms_network_service":
+        r = load_details_from_cfd(details)
+        if r["successful"]:
+            if "params" in r.viewkeys():
+                dicto.update({"params": r["params"]})
+            if "service_pairs" in r.viewkeys():
+                dicto.update({"service_pairs": r["service_pairs"]})
+        else:
+            return r
+    elif details["entitytype"] == "virtual_network":
+        r = load_details_from_cfd(details)
+        if r["successful"]:
+            dicto.update(r)
+            if "successful" in dicto.viewkeys():
+                dicto.pop("successful")
         else:
             return r
     # elif details["entitytype"] == "compute_network_service":
@@ -1674,7 +1731,7 @@ def request_api(addr, userData, reqm, post_data):
                 if len(split[1]) == 36:
                     details = load_ent_details(split[1])
                     if len(split) < 3:  # details about one thing like departments/uuid
-                        if details["EntityType"] not in split[0]:
+                        if details["EntityType"] not in convert_obj_type_to_db(split[0]):
                             if not (details["EntityType"] == "externalnetwork" and split[
                                 0] == "external-networks"):
                                 # makes sure you cant ask dept details and give vdc uuid.
@@ -1729,7 +1786,7 @@ def request_api(addr, userData, reqm, post_data):
                         return "Forbidden"
 
                     if len(split) < 3:  # details about one thing like departments/uuid
-                        if details["EntityType"] not in split[0]:
+                        if details["EntityType"] not in convert_obj_type_to_db(split[0]):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
                         return get_entity(details["EntityType"], details["UniqueId"], details)
@@ -1800,7 +1857,7 @@ def request_api(addr, userData, reqm, post_data):
                         return "Forbidden"
 
                     if len(split) < 3:  # details about one thing like departments/uuid
-                        if details["EntityType"] not in split[0]:
+                        if details["EntityType"] not in convert_obj_type_to_db(split[0]):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
                         return get_entity(details["EntityType"], details["UniqueId"], details)
@@ -1874,7 +1931,7 @@ def request_api(addr, userData, reqm, post_data):
                         return "Forbidden"
 
                     if len(split) < 3:  # details about one thing like departments/uuid
-                        if details["EntityType"] not in split[0]:
+                        if details["EntityType"] not in convert_obj_type_to_db(split[0]):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
                         return get_entity(details["EntityType"], details["UniqueId"], details)

@@ -102,6 +102,8 @@ def activate(db, dbid, command_options, return_object):
     #return prov.activate_vdc(db, return_obj)
     eve = entity.entity_functions.EntityFunctions(db, dbid, return_object=return_object, quick_provision=True)
     status = eve.do(db, "command", options=command_options)
+    db.update_db_insert("UPDATE tblEntities SET EntityMode='Active' WHERE id='%s'" % dbid)
+    db.update_db_insert("UPDATE tblVdcs SET activated_at=NOW() WHERE tblEntities='%s'" % dbid)
     # rows = db.get_multiple_row("tblEntities", "EntityType='nat_network_service' AND ParentEntityId='%s'" % dbid)
     # for row in rows:
     #     eve = entity.entity_functions.EntityFunctions(db, row["id"], return_object=return_object, quick_provision=True)

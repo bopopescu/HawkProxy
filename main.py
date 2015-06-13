@@ -1458,6 +1458,16 @@ def load_details_from_cfd(details):
         d.update(r)
         return d
 
+def do_interface_addition(dicto, r):
+    if "interfaces" in r.viewkeys():
+        interfaces = r["interfaces"]
+        if "addresses" in r.viewkeys():
+            addresses = r["addresses"]
+        else:
+            addresses = None
+        ints = add_interfaces(interfaces, addresses)
+        dicto.update({"interfaces": ints})
+
 def format_details(details):
     print "FORMATTING DETAILS"
     print details
@@ -1485,6 +1495,8 @@ def format_details(details):
         # return dicto
     #dicto.update({"Name": details["name"], "Description": details["description"]})
     #return {details["entitytype"]: dicto}
+    do_interface_addition(dicto, r)
+
     if details["entitytype"] == "organization":
         depts = add_elements(load_owned(details["id"], "department"))
         imglibs = add_elements(load_owned(details["id"], "imagelibrary"))
@@ -1533,40 +1545,15 @@ def format_details(details):
                 dicto.update({"nat_address_type": r["params"]["external_address_type"]})
                 if r["params"]["external_address_type"] == "static":
                     dicto.update({"nat_static_address": r["params"]["external_address"]})
-        if "interfaces" in r.viewkeys():
-            interfaces = r["interfaces"]
-            if "addresses" in r.viewkeys():
-                addresses = r["addresses"]
-            else:
-                addresses = None
-            ints = add_interfaces(interfaces, addresses)
-            dicto.update({"interfaces": ints})
         dicto.update({
             "pat_mode": details["nat_pat_mode"]
         })
     elif details["entitytype"] == "externalnetwork":
-        if "interfaces" in r.viewkeys():
-            interfaces = r["interfaces"]
-            if "addresses" in r.viewkeys():
-                addresses = r["addresses"]
-            else:
-                addresses = None
-            ints = add_interfaces(interfaces, addresses)
-            dicto.update({"interfaces": ints})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
         if "cfm" in r.viewkeys():
             dicto.update({"cfm": r["cfm"]})
     elif details["entitytype"] == "fws_network_service":
-        if "interfaces" in r.viewkeys():
-            interfaces = r["interfaces"]
-            print interfaces
-            if "addresses" in r.viewkeys():
-                addresses = r["addresses"]
-            else:
-                addresses = None
-            ints = add_interfaces(interfaces, addresses)
-            dicto.update({"interfaces": ints})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
         if "autoscale" in r.viewkeys():
@@ -1578,14 +1565,6 @@ def format_details(details):
             "deployed": "???",
         })
     elif details["entitytype"] == "lbs_network_service":
-        if "interfaces" in r.viewkeys():
-            interfaces = r["interfaces"]
-            if "addresses" in r.viewkeys():
-                addresses = r["addresses"]
-            else:
-                addresses = None
-            ints = add_interfaces(interfaces, addresses)
-            dicto.update({"interfaces": ints})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
         if "autoscale" in r.viewkeys():
@@ -1600,14 +1579,6 @@ def format_details(details):
         })
 
     elif details["entitytype"] == "rts_network_service":
-        if "interfaces" in r.viewkeys():
-            interfaces = r["interfaces"]
-            if "addresses" in r.viewkeys():
-                addresses = r["addresses"]
-            else:
-                addresses = None
-            ints = add_interfaces(interfaces, addresses)
-            dicto.update({"interfaces": ints})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
         if "autoscale" in r.viewkeys():
@@ -1617,14 +1588,6 @@ def format_details(details):
             "deployed": "???",
         })
     elif details["entitytype"] == "ipsecvpn_network_service":
-        if "interfaces" in r.viewkeys():
-            interfaces = r["interfaces"]
-            if "addresses" in r.viewkeys():
-                addresses = r["addresses"]
-            else:
-                addresses = None
-            ints = add_interfaces(interfaces, addresses)
-            dicto.update({"interfaces": ints})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
     elif details["entitytype"] == "nms_network_service":
@@ -1633,17 +1596,101 @@ def format_details(details):
         if "service_pairs" in r.viewkeys():
             dicto.update({"service_pairs": r["service_pairs"]})
     elif details["entitytype"] == "virtual_network":
-        dicto.update(r)
+        dicto.update(r) #TODO Is this ok
         if "successful" in dicto.viewkeys():
             dicto.pop("successful")
-    # elif details["entitytype"] == "compute_network_service":
-    #     r = load_details_from_cfd(details)
-    #     if r["successful"]:
-    #         #dicto.update(r)
-    #         if "virtual_compute_pool" in r.viewkeys():
-    #             dicto.update({"virtual_compute_pool": r["virtual_compute_pool"]})
-    #     else:
-    #         return r
+    elif details["entitytype"] == "compute_network_service":
+        #dicto.update(r)
+        if "serverfarm" in r.viewkeys():
+            farms = add_elements(r["serverfarm"]["elements"])
+            dicto.update({"serverfarms": farms})
+        if "params" in r.viewkeys():
+            dicto.update({"params": r["params"]})
+        if "userdata" in r.viewkeys():
+            dicto.update({"userdata": r["userdata"]})
+        if "ssh_keys" in r.viewkeys():
+            keys = add_elements(r["ssh_keys"])
+            dicto.update({"ssh_keys": keys})
+        if "metadata" in r.viewkeys():
+            metadatas = add_elements(r["metadata"])
+            dicto.update({"metadata": metadatas})
+    elif details["entitytype"] == "serverfarm":
+        if "scale_option" in r.viewkeys():
+            dicto.update({
+                "scale_option": details["scale_option"],
+                "min" : details["min"],
+                "max" : details["max"],
+                "initial" : details["initial"]
+            })
+            # policies = ["bandwidth", "ram", "cpu"]
+            # for one in policies:
+            #     if one in r["dynamic_option"].viewkeys():
+            #         dicto.update({
+            #             str(one) + "_red": r["dynamic_option"][one][0],
+            #             str(one) + "_green": r["dynamic_option"][one][1]
+            #         })
+            dicto.update({"dynamic-option": r["dynamic_option"]})
+        if "params" in r.viewkeys():
+            dicto.update({"params": r["params"]})
+        if "userdata" in r.viewkeys():
+            dicto.update({"userdata": r["userdata"]})
+        if "ssh_keys" in r.viewkeys():
+            keys = add_elements(r["ssh_keys"])
+            dicto.update({"ssh_keys": keys})
+        if "metadata" in r.viewkeys():
+            metadatas = add_elements(r["metadata"])
+            dicto.update({"metadata": metadatas})
+        dicto.update({
+            "compute_service": "???TODO",#TODO HOW TO GET THIS
+            "compute_class":"???TODO"#TODO HOW TO GET THIS
+        })
+    elif details["entitytype"] == "server":
+        dicto.update({
+            "hypervisor": r["hypervisor"],
+            "cpu": r["cpu"],
+            "memory": r["memory"],
+            "boot_storage_type": r["boot_storage_type"],
+            "ephemeral_storage": r["ephemeral_storage"],
+            "weight": r["weight"],
+        })
+        if "nat" in r.viewkeys():
+            dicto.update({
+                "nat": r["nat"]
+            })
+        if "volumes" in r.viewkeys():
+            new_vols = []
+            for vol in r["volumes"]:
+                # if "hierarchy" in vol.viewkeys():
+                #     vol.pop("hierarchy")
+                new_vols.append(vol)
+            dicto.update({
+                "volumes": new_vols
+            })
+        if "server_boot" in r.viewkeys():
+            dicto.update({
+                "server_boot": r["server_boot"]
+            })
+
+        if "userdata" in r.viewkeys():
+            dicto.update({"userdata": r["userdata"]})
+        if "ssh_keys" in r.viewkeys():
+            keys = add_elements(r["ssh_keys"])
+            dicto.update({"ssh_keys": keys})
+        if "metadata" in r.viewkeys():
+            metadatas = add_elements(r["metadata"])
+            dicto.update({"metadata": metadatas})
+        if "xvpvnc_url" in r.viewkeys():
+            dicto.update({
+                "xvpvnc_url": r["xvpvnc_url"]
+            })
+        if "novnc_url" in r.viewkeys():
+            dicto.update({
+                "novnc_url": r["novnc_url"]
+            })
+    elif details["entitytype"] == "container":
+        r.pop("successful")
+        dicto.update(r)
+    # elif details["volume"] == "volume":
 
     else:
         for item in details.iteritems():

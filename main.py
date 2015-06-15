@@ -6,7 +6,6 @@ import pprint
 from urlparse import parse_qs
 from cgi import escape
 import sys
-import time
 import datetime
 
 import eventlet
@@ -55,36 +54,42 @@ def fetch(url):
     return urllib2.urlopen(url).read()
 
 
-def get_token_json_response(un, dname, pa):  # TODO WHY CANT I LOG IN AS DEPARTMENT USER
+def get_token_json_response(un, pa):
     sec = "6apC3IcauIeKd5StPTjWzTBXFzQXvooHanb4qxnePzccX4SFBt"
     passw = crypt.crypt(pa, sec)
-
-    payload = {
-        "auth": {
-            "identity": {
-                "methods": [
-                    "password"
-                ],
-                "password": {
-                    "user": {
-                        "domain": {
-                            "name": dname
-                        },
-                        "name": un,
-                        "password": passw
+    headers = {'Content-Type': 'application/json'}
+    responses = []
+    for domain in ["System", "CloudFlow"]:
+        payload = {
+            "auth": {
+                "identity": {
+                    "methods": [
+                        "password"
+                    ],
+                    "password": {
+                        "user": {
+                            "domain": {
+                                "name": domain
+                            },
+                            "name": un,
+                            "password": passw
+                        }
                     }
                 }
             }
         }
-    }
-
-    # log.info(json.dumps(payload))
-    headers = {'Content-Type': 'application/json'}
-    r = requests.post(AUTH_URL + "/auth/tokens", data=json.dumps(payload), headers=headers)
-    # log.info(r.url)
-    log.info("AUTH RESP BODY: %s", json.loads(r.text))
-    log.info("AUTH RESP HEADERS: %s", str(r.headers))
-    return process_raw_token_data(r.text, r.headers, un)
+        r = requests.post(AUTH_URL + "/auth/tokens", data=json.dumps(payload), headers=headers)
+        log.info("AUTH RESP BODY: %s", json.loads(r.text))
+        log.info("AUTH RESP HEADERS: %s", str(r.headers))
+        responses.append(r)
+    proc1 = process_raw_token_data(responses[0].text, responses[0].headers, un)
+    proc2 = process_raw_token_data(responses[1].text, responses[1].headers, un)
+    if proc1 is not False:
+        return proc1
+    elif proc2 is not False:
+        return proc2
+    else:
+        return False
 
 
 def add_token_to_mysql(token, uname):
@@ -107,6 +112,13 @@ def add_token_to_mysql(token, uname):
 
 def process_raw_token_data(body, headers, uname):
     # RETURNS JSON THAT SHOULD BE GIVEN AS RESPONSE TO AUTHENTICATE REQUEST
+    """
+
+    :param body:
+    :param headers:
+    :param uname:
+    :return: A token in string format if auth successful, otherwise False
+    """
     try:
         tokenID = headers["X-Subject-Token"]
     except KeyError:
@@ -523,6 +535,7 @@ def get_spec_details(obj_uuid, acls, canSeeDetails=False):
         log.critical("BLANK DETAILS" + str(obj_uuid))
     return details
 
+
 def get_spec_details_with_parent_id(ent_type, name, parent_id):
     return cloudDB.get_row_dict("tblEntities", {"EntityType": ent_type, "Name": name, "ParentEntityId": parent_id})
 
@@ -572,7 +585,7 @@ def create_interface(beg_serv_name, end_serv_name, interface_specs, vdc_id):
     options = {}
     beggining_row = cloudDB.get_row_dict("tblEntities", {"Name": beg_serv_name, "ParentEntityId": vdc_id})
     ending_row = cloudDB.get_row_dict("tblEntities", {"Name": end_serv_name, "ParentEntityId": vdc_id})
-    if beggining_row["EntityType"] == "externalnetwork": #TODO is this right
+    if beggining_row["EntityType"] == "externalnetwork":  # TODO is this right
         log.error("Attempt to create interface starting at extnet")
         return
     # if beggining_row["EntityType"] != "switch_network_service" and ending_row["EntityType"] != "switch_network_service":
@@ -606,7 +619,7 @@ def create_interface(beg_serv_name, end_serv_name, interface_specs, vdc_id):
 
 
 def create_interfaces(ent_name, interfaces_array, vdc_id):
-    #TODO Handle interface params
+    # TODO Handle interface params
     for interface in interfaces_array:
         beg_serv_name = ent_name
         end_serv_name = interface["subnet"]
@@ -668,7 +681,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             options.update(
                 {"name": name, "description": descr, "entitytype": obj_type, "parententityid": vdc_details["id"]})
 
-    #-----------------------------------------------------UPDATE--------------------------------------
+    # -----------------------------------------------------UPDATE--------------------------------------
     elif action == "update" and child_details is not None:
         for key in data:
             try:
@@ -689,7 +702,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             "parententityid": vdc_details["id"]
         })
 
-        if len(service_type) > 0: #network service TODO Maybe some of these take extra information?
+        if len(service_type) > 0:  # network service TODO Maybe some of these take extra information?
             options.update({"servicetype": service_type})
             options.update({
                 "id": child_details["id"],
@@ -722,12 +735,13 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
         elif obj_type == "serverfarm":
 
             if "metadata" in data.viewkeys():
-                options.update({"metadata" : data["metadata"]})
+                options.update({"metadata": data["metadata"]})
             if "ssh_keys" in data.viewkeys():
-                options.update({"ssh_keys" : data["ssh_keys"]})
+                options.update({"ssh_keys": data["ssh_keys"]})
             if "compute_service" in data.viewkeys():
                 attached_compute_name = data["compute_service"]
-                compute_row = get_spec_details_with_parent_id("compute_network_service", attached_compute_name, vdc_details["id"])
+                compute_row = get_spec_details_with_parent_id("compute_network_service", attached_compute_name,
+                                                              vdc_details["id"])
                 if compute_row is not None:
                     options.update({
                         "attach_to": [
@@ -737,9 +751,9 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             if "dynamic_option" in data.viewkeys():
                 options.update({
                     "scale_option": data["dynamic_option"],
-                    "min" : data["min"],
-                    "max" : data["max"],
-                    "initial" : data["initial"]
+                    "min": data["min"],
+                    "max": data["max"],
+                    "initial": data["initial"]
                 })
                 policies = ["bandwidth", "ram", "cpu"]
                 for one in policies:
@@ -782,9 +796,10 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                     })
                 if "boot_volume" in data["server_boot"].viewkeys():
                     if "volume_name" in data["server_boot"]["boot_volume"].viewkeys():
-                        boot_volume_row = get_spec_details_with_parent_id("volume", data["server_boot"]["boot_volume"]["volume_name"], vdc_details["id"])
+                        boot_volume_row = get_spec_details_with_parent_id("volume", data["server_boot"]["boot_volume"][
+                            "volume_name"], vdc_details["id"])
                         attached_entities.append({
-                            "entitytype": "volume", #TODO was volume_boot before
+                            "entitytype": "volume",  # TODO was volume_boot before
                             "entities": [
                                 {
                                     "attachedentityid": boot_volume_row["id"]
@@ -803,10 +818,11 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
                         ]
                     })
             if "metadata" in data.viewkeys():
-                options.update({"metadata" : data["metadata"]})
+                options.update({"metadata": data["metadata"]})
             if "nat" in data.viewkeys() and isinstance(data["nat"], list):
                 for nat in data["nat"]:
-                    nat_row = get_spec_details_with_parent_id("nat_network_service", nat["volume_name"], vdc_details["id"])
+                    nat_row = get_spec_details_with_parent_id("nat_network_service", nat["volume_name"],
+                                                              vdc_details["id"])
                     attached_entities.append({
                         "entitytype": "nat_network_service",
                         "entities": [
@@ -820,7 +836,8 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
         elif obj_type == "container":
             if "storage_class" in data.viewkeys():
                 storage_class_name = data["storage_class"]
-                db_row = get_spec_details_with_parent_id(ent_type=obj_type, name=storage_class_name, parent_id=vdc_details["id"])
+                db_row = get_spec_details_with_parent_id(ent_type=obj_type, name=storage_class_name,
+                                                         parent_id=vdc_details["id"])
                 if data["datareduction"] == "None":
                     contype = "Regular"
                 else:
@@ -902,7 +919,34 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
         # elif obj_type == "lbs_service":
         # elif obj_type == "vpn_group":
         # elif obj_type == "ipsecvpn_network_service":
-
+        elif obj_type == "vdc":
+            #TODO attached_entities ssh key???
+            if "ssh_keys" in data.viewkeys():
+                options.update({"ssh_keys": data["ssh_keys"]})
+            if "metadata" in data.viewkeys():
+                options.update({"metadata": data["metadata"]})
+            # {
+            #     "HighAvailabilityOptionPolicy": "VDC overrides device",
+            #     "SlicePreferencePolicy": "VDC overrides device",
+            #     "VDCPerformancePolicy": "Best Effort",
+            #     "HighAvailabilityOptions": "Default",
+            #     "attached_entities": [
+            #         {
+            #             "entities": [
+            #                 {
+            #                     "attachedentityid": "2784"
+            #                 }
+            #             ],
+            #             "entitytype": "ssh_user"
+            #         }
+            #     ],
+            #     "metadata": [
+            #         {
+            #             "thekey": "asdf",
+            #             "thevalue": "fdsa"
+            #         }
+            #     ]
+            # }
         elif obj_type == "externalnetwork":
             options.update({"servicetype": "externalNetwork",
                             "entitytype": obj_type, })
@@ -984,6 +1028,7 @@ def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
     entity_res.update({"UUID": row["UniqueId"]})
     return json.dumps(entity_res)
 
+
 def get_entity(obj_type, obj_uuid, details):
     # print details
     # print obj_type
@@ -992,8 +1037,9 @@ def get_entity(obj_type, obj_uuid, details):
     slice_row_lower = utils.cloud_utils.lower_key(slice_row)
     ent = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
     ent._status(cloudDB, do_get=True)
-    #return format_details(ent.row)
+    # return format_details(ent.row)
     return ent.row
+
 
 def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row):
     # print ent_type
@@ -1006,15 +1052,20 @@ def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
     # print formatted_post_data["name"]
     # print parent_vdc_details["id"]
 
-    ent = EntityFunctions(db=cloudDB, dbid=get_spec_details_with_parent_id(ent_type, formatted_post_data["name"], parent_vdc_details["id"])["id"], slice_row=s_row)
-    ent._status(cloudDB, generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create"), do_get=True)
+    ent = EntityFunctions(db=cloudDB, dbid=
+    get_spec_details_with_parent_id(ent_type, formatted_post_data["name"], parent_vdc_details["id"])["id"],
+                          slice_row=s_row)
+    ent._status(cloudDB, generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create"),
+                do_get=True)
     # print "ENTITY ROW: " + str(ent.row)
     if ent.row is None:
         log.critical("ERROR ENTITY ROW NONE " + str(ent.row))
-    options = generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "update", child_details=ent.row)
+    options = generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "update",
+                               child_details=ent.row)
     res = ent._update(cloudDB, options)
     entity.entity_commands.update_multiple(cloudDB, ent.row["id"], options)
     return res
+
 
 def convert_obj_cont_name(obj_type):
     if obj_type == "subnets":
@@ -1122,7 +1173,9 @@ def convert_obj_type_to_db(obj_type):
     else:
         return "ERROR: Invalid entity type desired"
     return obj_type
-#TODO RES_CODE EVERYWHERE!!!!!
+
+
+# TODO RES_CODE EVERYWHERE!!!!!
 
 def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
     global RES_CODE
@@ -1163,13 +1216,13 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         if reqm == "POST" or reqm == "PUT":
             for field in columns:
                 try:
-                    #print
+                    # print
                     data[str(field["Field"]).lower()]
                 except:
                     data.update({str(field["Field"]).lower(): None})
 
             try:
-                #print
+                # print
                 data[str("description").lower()]
             except:
                 data.update({str("description").lower(): None})
@@ -1217,7 +1270,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         elif reqm == "GET":
             RES_CODE = "200 OK"
             r = rest.get_rest(UA + spec_uri, headers)
-            #entity_res = get_entity(obj_type, obj_uuid, details, slice_row_lower)
+            # entity_res = get_entity(obj_type, obj_uuid, details, slice_row_lower)
             entity_res = json.dumps({"uuid": details["UniqueId"]})
             return format_details(get_entity(details["EntityType"], details["UniqueId"], details))
         elif reqm == "DELETE":
@@ -1242,6 +1295,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
 
     return False
 
+
 def validate(ent_uuid, acls):
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
@@ -1258,23 +1312,26 @@ def validate(ent_uuid, acls):
         hawk_validation.update({"resource_state": r["resource_state"]["state"]})
     return hawk_validation
 
+
 def reserve_resources(ent_uuid, acls, return_object):
-    #TODO forward to cfd
+    # TODO forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "reserve-resources"}
     return api_actions.reserve_resources(cloudDB, row["id"], command_options, row, return_obj=return_object)
 
-def provision(ent_uuid, acls, return_obj): #flag for async
-    #TODO Forward to cfd
+
+def provision(ent_uuid, acls, return_obj):  # flag for async
+    # TODO Forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "provision"}
-    #api_actions.prov2(cloudDB, row["id"], command_options, row)
+    # api_actions.prov2(cloudDB, row["id"], command_options, row)
     return api_actions.provision(cloudDB, row["id"], command_options, row, return_obj)
 
+
 def activate(ent_uuid, acls, return_object):
-    #check that the vdc is in the proper state, eg provisioned
+    # check that the vdc is in the proper state, eg provisioned
     # if entity["entitystatus"].lower() == "suspended":
     #     dashboard.update_vdc_entitystatus(db, "Resuming")
     #     dashboard.register_event(db)
@@ -1292,11 +1349,13 @@ def activate(ent_uuid, acls, return_object):
 
     return api_actions.activate(cloudDB, row["id"], command_options, return_object)
 
+
 def deprovision(ent_uuid, acls):
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "deprovision"}
     return api_actions.deprovision(cloudDB, row["id"], command_options)
+
 
 def destroy(ent_uuid, acls):
     vdc = get_spec_details(ent_uuid, acls)
@@ -1306,11 +1365,13 @@ def destroy(ent_uuid, acls):
     print "VDC CHILDREN: " + str(children_of_vdc)
     for child in children_of_vdc:
         if child["EntityType"] != "container":
-            if not(child["EntityType"] == "volume" and child["EntityStatus"] == "Active"): #TODO do we need to update entstat
+            if not (child["EntityType"] == "volume" and child[
+                "EntityStatus"] == "Active"):  # TODO do we need to update entstat
                 e = EntityFunctions(cloudDB, child["id"], quick_provision=True)
                 e._delete(cloudDB)
     return deprovision(ent_uuid, acls)
-    #not active volumes or containers
+    # not active volumes or containers
+
 
 def special_action(ent_type, split, reqm, acls, userData, post_data):
     print "RUNNING_ACTION: " + str(post_data) + " " + str(split) + " " + reqm
@@ -1351,7 +1412,6 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
             res = destroy(ent_uuid, acls)
             return {command: res}
     return False
-
 
 
 def special_process(action_type, split, reqm, acls, user_data, post_data):
@@ -1395,24 +1455,36 @@ def get_dict_details(details):
     dicto.update({"Name": details["Name"], "Description": details["Description"]})
     return {details["EntityType"]: dicto}
 
+
 def add_elements(things):
     dicto = {"elements": []}
     if things is None:
         return dicto
-    if len(things) == 0:
-        return dicto
+    # if len(things) == 0:
+    #     return dicto
     for thing in things:
         onedic = {}
-        onedic.update({
-            "name": thing["Name"],
-            "uuid": thing["UniqueId"]
-        })
-        dicto["elements"].append(onedic)
-    dicto.update({
-        "type": things[0]["EntityType"],
-        "total": len(things)
-    })
+        #onedic.update(thing)
+        for key, val in thing.iteritems():
+            if key != "uri":
+                onedic.update({key: val})
+        # if "name" in thing.viewkeys():
+        #     onedic.update({"name": thing["name"]})
+        # if "Name" in thing.viewkeys():
+        #     onedic.update({"name": thing["Name"]})
+        # if "uniqueid" in thing.viewkeys():
+        #     onedic.update({"uuid": thing["uniqueid"]})
+        # if "UniqueId" in thing.viewkeys():
+        #     onedic.update({"uuid": thing["UniqueId"]})
+        if len(onedic) > 0:
+            dicto["elements"].append(onedic)
+
+    if len(things) > 0:
+        if "EntityType" in things[0].viewkeys():
+            dicto.update({"type": things[0]["EntityType"]})
+    dicto.update({"total": len(things)})
     return dicto
+
 
 def add_interfaces(things, addresses=None):
     dicto = {"elements": []}
@@ -1427,7 +1499,7 @@ def add_interfaces(things, addresses=None):
 
         if addresses is not None:
             for address in addresses:
-                net_name = address["network"] #TODO is network name the right thing here
+                net_name = address["network"]  # TODO is network name the right thing here
                 if net_name == int_name:
                     addrs.update(address)
                     break
@@ -1445,9 +1517,10 @@ def add_interfaces(things, addresses=None):
     })
     return dicto
 
+
 def load_details_from_cfd(details):
     spec_uri = load_spec_uri(details)
-    r = rest.get_rest(UA+spec_uri)
+    r = rest.get_rest(UA + spec_uri)
     if r["http_status_code"] != 200:
         print "FAILED GET " + str(r["http_status_code"])
         return {"Error": "Entity not found in CFD", "successful": False}
@@ -1457,6 +1530,7 @@ def load_details_from_cfd(details):
         d = {"successful": True}
         d.update(r)
         return d
+
 
 def do_interface_addition(dicto, r):
     if "interfaces" in r.viewkeys():
@@ -1468,16 +1542,17 @@ def do_interface_addition(dicto, r):
         ints = add_interfaces(interfaces, addresses)
         dicto.update({"interfaces": ints})
 
+
 def format_details(details):
     print "FORMATTING DETAILS"
     print details
-    details = dict_keys_to_lower(details) #TODO values str()
+    details = dict_keys_to_lower(details)  # TODO values str()
     dicto = {}
     dicto.update({
-            "name": details["name"],
-            "type": details["entitytype"],
-            "description": details["description"],
-            "uuid": details["uniqueid"]
+        "name": details["name"],
+        "type": details["entitytype"],
+        "description": details["description"],
+        "uuid": details["uniqueid"]
     })
     if "entitystatus" in details.viewkeys():
         dicto.update({
@@ -1493,8 +1568,8 @@ def format_details(details):
         # for item in dict_keys_to_lower(get_entity(details["entitytype"], details["uniqueid"], details)).iteritems():
         #         dicto.update({str(item[0]): str(item[1])})
         # return dicto
-    #dicto.update({"Name": details["name"], "Description": details["description"]})
-    #return {details["entitytype"]: dicto}
+    # dicto.update({"Name": details["name"], "Description": details["description"]})
+    # return {details["entitytype"]: dicto}
     do_interface_addition(dicto, r)
 
     if details["entitytype"] == "organization":
@@ -1535,8 +1610,8 @@ def format_details(details):
             "virtual-networks": virnets
         })
     elif details["entitytype"] == "nat_network_service":
-        #TODO when deprovisioned, nat dissapears from cfd
-        #dicto.update(r)
+        # TODO when deprovisioned, nat dissapears from cfd
+        # dicto.update(r)
         if "cfm" in r.viewkeys():
             dicto.update({"cfm": r["cfm"]})
         if "params" in r.viewkeys():
@@ -1596,11 +1671,11 @@ def format_details(details):
         if "service_pairs" in r.viewkeys():
             dicto.update({"service_pairs": r["service_pairs"]})
     elif details["entitytype"] == "virtual_network":
-        dicto.update(r) #TODO Is this ok
+        dicto.update(r)  # TODO Is this ok
         if "successful" in dicto.viewkeys():
             dicto.pop("successful")
     elif details["entitytype"] == "compute_network_service":
-        #dicto.update(r)
+        # dicto.update(r)
         if "serverfarm" in r.viewkeys():
             farms = add_elements(r["serverfarm"]["elements"])
             dicto.update({"serverfarms": farms})
@@ -1618,9 +1693,9 @@ def format_details(details):
         if "scale_option" in r.viewkeys():
             dicto.update({
                 "scale_option": details["scale_option"],
-                "min" : details["min"],
-                "max" : details["max"],
-                "initial" : details["initial"]
+                "min": details["min"],
+                "max": details["max"],
+                "initial": details["initial"]
             })
             # policies = ["bandwidth", "ram", "cpu"]
             # for one in policies:
@@ -1641,8 +1716,8 @@ def format_details(details):
             metadatas = add_elements(r["metadata"])
             dicto.update({"metadata": metadatas})
         dicto.update({
-            "compute_service": "???TODO",#TODO HOW TO GET THIS
-            "compute_class":"???TODO"#TODO HOW TO GET THIS
+            "compute_service": "???TODO",  # TODO HOW TO GET THIS
+            "compute_class": "???TODO"  # TODO HOW TO GET THIS
         })
     elif details["entitytype"] == "server":
         dicto.update({
@@ -1690,11 +1765,42 @@ def format_details(details):
     elif details["entitytype"] == "container":
         r.pop("successful")
         dicto.update(r)
-    # elif details["volume"] == "volume":
+    elif details["entitytype"] == "volume":
+        if "volume_type" in r.viewkeys():
+            dicto.update({"volume_type": r["volume_type"]})
+        if "capacity" in r.viewkeys():
+            dicto.update({"capacity": r["capacity"]})
+        if "snapshot_params" in r.viewkeys():
+            dicto.update({"snapshot_params": r["snapshot_params"]})
+        if "backup_params" in r.viewkeys():
+            dicto.update({"backup_params": r["backup_params"]})
+    elif details["entitytype"] == "vdc":
+        for key, val in r.iteritems():
+            if not isinstance(val, dict) and not isinstance(val, list):
+                if "uri" not in str(key):
+                    dicto.update({key: val})
+        if "params" in r.viewkeys():
+            dicto.update({"params": r["params"]})
+        types = ["subnets", "external_networks", "nats", "firewalls", "loadbalancers", "routers", "ipss", "vpns"]
+        for t in types:
+            if t in r.viewkeys():
+                if r[t]["total"] == 0:
+                    ents = []
+                else:
+                    ents = r[t]["elements"]
+                conf_ents = add_elements(ents)
+                dicto.update({t: conf_ents})
+        if "subnets" in r.viewkeys():
+            if r["subnets"]["total"] > 0:
+                subnets = r["subnets"]["elements"]
+                snets = add_elements(subnets)
+                dicto.update({"subnets": snets})
 
+        #dicto.update(r)
     else:
         for item in details.iteritems():
             dicto.update({str(item[0]): str(item[1])})
+    dicto.pop("http_status_code")
     return dicto
 
 
@@ -1749,7 +1855,7 @@ def request_api(addr, userData, reqm, post_data):
                 if len(split[1]) == 36:
                     if split[2] == "actions":
                         return special_action(split[0], split, reqm, acls, userData, post_data)
-        elif len(split) == 2: #PUT OR DELETE ON vdcs/vdc_uuid
+        elif len(split) == 2:  # PUT OR DELETE ON vdcs/vdc_uuid
             if split[0] == "vdcs":
                 if len(split[1]) == 36:
                     return special_process("vdcs", split, reqm, acls, userData, post_data)
@@ -1783,7 +1889,7 @@ def request_api(addr, userData, reqm, post_data):
                                 print split[0]
                                 return False
                         return format_details(get_entity(details["EntityType"], details["UniqueId"], details))
-                        #return get_dict_details(details)
+                        # return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
@@ -1834,7 +1940,7 @@ def request_api(addr, userData, reqm, post_data):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
                         return get_entity(details["EntityType"], details["UniqueId"], details)
-                        #return get_dict_details(details)
+                        # return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
@@ -1905,7 +2011,7 @@ def request_api(addr, userData, reqm, post_data):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
                         return get_entity(details["EntityType"], details["UniqueId"], details)
-                        #return get_dict_details(details)
+                        # return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
@@ -1979,7 +2085,7 @@ def request_api(addr, userData, reqm, post_data):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
                         return get_entity(details["EntityType"], details["UniqueId"], details)
-                        #return get_dict_details(details)
+                        # return get_dict_details(details)
 
     return False
 
@@ -2053,11 +2159,11 @@ def serve(env, start_response):
             try:
                 user = escape(data.get("user")[0])
                 passw = escape(data.get("pass")[0])
-                dname = escape(data.get("domain")[0])
+                #dname = escape(data.get("domain")[0])
             except (TypeError):
                 start_response('400 Bad Request', defresponse_header)
                 return oman.no_post_data()
-            tokenResp = get_token_json_response(user, dname, passw)
+            tokenResp = get_token_json_response(user, passw)
             if tokenResp is False:
                 start_response('401 Unauthorized', defresponse_header)
                 return oman.auth_failed()

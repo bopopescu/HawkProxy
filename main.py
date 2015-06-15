@@ -49,6 +49,8 @@ cloudDB = CloudGlobalBase(pool=False)
 
 RES_CODE = "400 Bad Request"
 
+# TODO In all queries, resulting rows can be None if query fails or db connection fails, causing TypeError on len call
+# WITH ALL MYSQL SEARCHES, MAKE SURE ROW DELETED == 0; replace get_row with get_row_dict
 
 def fetch(url):
     return urllib2.urlopen(url).read()
@@ -107,7 +109,6 @@ def add_token_to_mysql(token, uname):
         cloudDB.update_db("UPDATE tblUsers SET TokenIssuedAt = %s WHERE tblEntities = '%s'" % (t, entID))
         cloudDB.update_db("UPDATE tblUsers SET TokenExpiresAt = %s WHERE tblEntities = '%s'" % (t_ex, entID))
         cloudDB.update_db("UPDATE tblUsers SET LastActivityDate = %s WHERE tblEntities = '%s'" % (t, entID))
-        # print cloudDB.get_row("tblUsers", "tblEntities='%s'" % (entID))
 
 
 def process_raw_token_data(body, headers, uname):
@@ -136,7 +137,6 @@ def process_raw_token_data(body, headers, uname):
 def validate_token(token):
     # log.info(token)
     rows = cloudDB.get_multiple_row("tblUsers", "Token='%s'" % (token))
-    # TODO In all queries, resulting rows can be None if query fails or db connection fails, causing TypeError on len call
     if rows is None:
         log.critical("Database query failed.")
         return False
@@ -180,7 +180,7 @@ def trim_uri(uri):
 
 def load_owned_objects_rec(ent_id, depth):
     # THIS SHOULD RETURN ONE ARRAY OF NESTED ARRAYS OF DICTIONARIES
-    # TODO Recursively load all objects that the user has control over
+    # Recursively load all objects that the user has control over
     # Takes a ACLEntityID
     # Looks at all entities with that parent ID
     # For each entity, look at other entities that are children of that entity
@@ -366,8 +366,11 @@ def get_parent_details(child_id):
 
 
 def get_acl_role(aclID):
-    user = cloudDB.get_row("tblEntitiesACL", "AclEntityId='%s'" % (aclID))
-    return user["AclRole"]
+    user = cloudDB.get_row_dict("tblEntitiesACL", {"AclEntityId": aclID})
+    if user is not None:
+        return user["AclRole"]
+    else:
+        return None
 
 
 def load_all_available(vdc_id, enttype):
@@ -401,9 +404,7 @@ def load_all_available_vir_nets(vdc_id):
     return load_owned(vdc_id, enttype) + load_owned(org_id, enttype) + dept_spec
 
 
-# TODO WITH ALL MYSQL SEARCHES, MAKE SURE ROW DELETED == 0; replace get_row with get_row_dict
-
-# def json_list_objects_arr(address, givens, aclRole): #TODO THIS NEEDS TO PROVIDE ERROR IF RESPONSE IS BLANK!!!
+# def json_list_objects_arr(address, givens, aclRole): # THIS NEEDS TO PROVIDE ERROR IF RESPONSE IS BLANK!!!
 #     jStack = {}
 #
 #     organizations = {}
@@ -417,7 +418,7 @@ def load_all_available_vir_nets(vdc_id):
 #     jStack.update({"uri": address, "user_type": aclRole})
 #     for one in givens:
 #         num = len(one)
-#         oneSpecs = {"type": None, "total": num}  # TODO Type needs to be established
+#         oneSpecs = {"type": None, "total": num}  # Type needs to be established
 #         elements = []
 #         for thing in one:
 #             element = {"name": thing["Name"]}
@@ -626,6 +627,81 @@ def create_interfaces(ent_name, interfaces_array, vdc_id):
         create_interface(beg_serv_name, end_serv_name, interface, vdc_id)
 
 
+def convert_post_data_to_cfd(data):
+    if "ssh_keys" in data.viewkeys():
+        if isinstance(data["ssh_keys"], list):
+            new_ssh_keys = []
+            for ssh_key in data["ssh_keys"]:
+                if "type" not in ssh_key.viewkeys():
+                    continue
+                key_type = ssh_key["type"]
+                ssh_ent = {}
+                if key_type == "user":
+                    if "login_id" in ssh_key.viewkeys():
+                        log_id = ssh_key["login_id"]
+                        row = cloudDB.get_row_dict("tblUsers", {"LoginId": log_id})
+                        if row is None:
+                            continue
+                        user_id = row["tblEntities"]
+                        rowssh = cloudDB.get_row_dict("tblSSHPublicKeys", {"tblEntities": user_id})
+                        if rowssh is None:
+                            continue
+                        keyname = rowssh["name"]
+                        key = rowssh["public_key"]
+                        ssh_ent = {
+                            "name": keyname,
+                            "key": key
+                        }
+                elif key_type == "new":
+                    if "key_name" in ssh_key.viewkeys() and "key" in ssh_key.viewkeys():
+                        keyname = ssh_key["key_name"]
+                        key = ssh_key["key"]
+                        ssh_ent = {
+                            "name": keyname,
+                            "key": key
+                        }
+                new_ssh_keys.append(ssh_ent)
+            data.update({"ssh_keys": new_ssh_keys})
+
+def do_ssh_keys_conversion_to_db(options, data):
+    if "ssh_keys" in data.viewkeys():
+        if isinstance(data["ssh_keys"], list):
+            for ssh_key in data["ssh_keys"]:
+                if "type" not in ssh_key.viewkeys():
+                    continue
+                key_type = ssh_key["type"]
+                if key_type == "user":
+                    if "login_id" in ssh_key.viewkeys():
+                        log_id = ssh_key["login_id"]
+                        row = cloudDB.get_row_dict("tblUsers", {"LoginId": log_id})
+                        if row is None:
+                            continue
+                        user_id = row["tblEntities"]
+                        ssh_ent = {
+                            "entities": [
+                                {
+                                    "attachedentityid": user_id
+                                }
+                            ],
+                            "entitytype": "ssh_user"
+                        }
+                        if "attached_entities" in options.viewkeys():
+                            if isinstance(options["attached_entities"], list):
+                                options["attached_entities"].append(ssh_ent)
+                        else:
+                            options.update({"attached_entities": [ssh_ent]})
+                elif key_type == "new":
+                    if "key_name" in ssh_key.viewkeys() and "key" in ssh_key.viewkeys():
+                        ssh_ent = {
+                            "name": ssh_key["key_name"],
+                            "public_key": ssh_key["key"]
+                        }
+                        if "ssh_keys" in options.viewkeys():
+                            if isinstance(options["ssh_keys"], list):
+                                options["ssh_keys"].append(ssh_ent)
+                        else:
+                            options.update({"ssh_keys": [ssh_ent]})
+
 def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", child_details=None):  # parent details
     options = {}
 
@@ -736,8 +812,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
 
             if "metadata" in data.viewkeys():
                 options.update({"metadata": data["metadata"]})
-            if "ssh_keys" in data.viewkeys():
-                options.update({"ssh_keys": data["ssh_keys"]})
+            do_ssh_keys_conversion_to_db(options, data)
             if "compute_service" in data.viewkeys():
                 attached_compute_name = data["compute_service"]
                 compute_row = get_spec_details_with_parent_id("compute_network_service", attached_compute_name,
@@ -920,33 +995,13 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
         # elif obj_type == "vpn_group":
         # elif obj_type == "ipsecvpn_network_service":
         elif obj_type == "vdc":
-            #TODO attached_entities ssh key???
-            if "ssh_keys" in data.viewkeys():
-                options.update({"ssh_keys": data["ssh_keys"]})
+            do_ssh_keys_conversion_to_db(options, data)
             if "metadata" in data.viewkeys():
                 options.update({"metadata": data["metadata"]})
-            # {
-            #     "HighAvailabilityOptionPolicy": "VDC overrides device",
+            #     "HighAvailabilityOptionPolicy": "VDC overrides device", #TODO are these the same key names?
             #     "SlicePreferencePolicy": "VDC overrides device",
             #     "VDCPerformancePolicy": "Best Effort",
             #     "HighAvailabilityOptions": "Default",
-            #     "attached_entities": [
-            #         {
-            #             "entities": [
-            #                 {
-            #                     "attachedentityid": "2784"
-            #                 }
-            #             ],
-            #             "entitytype": "ssh_user"
-            #         }
-            #     ],
-            #     "metadata": [
-            #         {
-            #             "thekey": "asdf",
-            #             "thevalue": "fdsa"
-            #         }
-            #     ]
-            # }
         elif obj_type == "externalnetwork":
             options.update({"servicetype": "externalNetwork",
                             "entitytype": obj_type, })
@@ -1033,7 +1088,7 @@ def get_entity(obj_type, obj_uuid, details):
     # print details
     # print obj_type
     # print obj_uuid
-    slice_row = cloudDB.get_row("tblSlices", "tblEntities='28'")
+    slice_row = cloudDB.get_row_dict("tblSlices", {"tblEntities": 28}) #TODO is slice id hardcoded?
     slice_row_lower = utils.cloud_utils.lower_key(slice_row)
     ent = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
     ent._status(cloudDB, do_get=True)
@@ -1202,7 +1257,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         obj_cont_name = convert_obj_cont_name(obj_type)
         obj_type = convert_obj_type_to_db(obj_type)
 
-        slice_row = cloudDB.get_row("tblSlices", "tblEntities='28'")
+        slice_row = cloudDB.get_row_dict("tblSlices", {"tblEntities": 28}) #TODO is slice id hardcoded?
         slice_row_lower = utils.cloud_utils.lower_key(slice_row)
         headers = {"Content-Type": "clouds.net." + obj_cont_name + "+json"}
         spec_uri = load_spec_uri(bottom_child_details=details)
@@ -1247,14 +1302,14 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         if reqm == "POST":
             print UA + spec_uri
             print data
-            r = rest.post_rest(UA + spec_uri, data, headers)
+            r = rest.post_rest(UA + spec_uri, convert_post_data_to_cfd(data), headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
                 entity_res = create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower)
                 RES_CODE = "201 Created"
                 # ent = EntityFunctions(db=cloudDB, dbid=0)
                 # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":
-            r = rest.put_rest(UA + spec_uri, data, headers)
+            r = rest.put_rest(UA + spec_uri, convert_post_data_to_cfd(data), headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
                 # options = data
                 # print options
@@ -1274,6 +1329,8 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
             entity_res = json.dumps({"uuid": details["UniqueId"]})
             return format_details(get_entity(details["EntityType"], details["UniqueId"], details))
         elif reqm == "DELETE":
+            #TODO only if status is ready
+            #TODO if active children, dont delete
             r = rest.delete_rest(UA + spec_uri, headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
                 options = {"parententityid": details["id"]}
@@ -1365,8 +1422,7 @@ def destroy(ent_uuid, acls):
     print "VDC CHILDREN: " + str(children_of_vdc)
     for child in children_of_vdc:
         if child["EntityType"] != "container":
-            if not (child["EntityType"] == "volume" and child[
-                "EntityStatus"] == "Active"):  # TODO do we need to update entstat
+            if child["EntityType"] != "volume":  # TODO do we need to update entstat
                 e = EntityFunctions(cloudDB, child["id"], quick_provision=True)
                 e._delete(cloudDB)
     return deprovision(ent_uuid, acls)

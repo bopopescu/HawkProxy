@@ -1114,6 +1114,22 @@ def get_entity(details):
     # return format_details(ent.row)
     return ent.row
 
+def get_entity_from_id(_dbid):
+    # print details
+    # print obj_type
+    # print obj_uuid
+    """
+
+    :param details:
+    :return: Returns details with lowercase keys
+    """
+    slice_row = cloudDB.get_row_dict("tblSlices", {"tblEntities": 28})  # TODO is slice id hardcoded?
+    slice_row_lower = utils.cloud_utils.lower_key(slice_row)
+    ent = EntityFunctions(db=cloudDB, dbid=_dbid, slice_row=slice_row_lower, quick_provision=True)
+    ent._status(cloudDB, do_get=True)
+    # return format_details(ent.row)
+    return ent.row
+
 
 def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, s_row):
     # print ent_type
@@ -1337,9 +1353,14 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
             print data
             r = rest.post_rest(UA + spec_uri, convert_post_data_to_cfd(data), headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                entity_res = create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower)
+                entity_res = json.loads(create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower))
                 RES_CODE = "201 Created"
-                return format_details(get_entity(details))
+                created_entity_uuid = entity_res["UUID"]
+                row = load_ent_details(created_entity_uuid)
+                res = format_details(get_entity_from_id(row["id"]))
+                print "RETURNING POST"
+                print res
+                return res
                 # ent = EntityFunctions(db=cloudDB, dbid=0)
                 # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":
@@ -1575,7 +1596,7 @@ def add_elements(things):
         # onedic.update(thing)
         for key, val in thing.iteritems():
             if key != "uri":
-                onedic.update({key: val})
+                onedic.update({key: str(val)})
         # if "name" in thing.viewkeys():
         #     onedic.update({"name": thing["name"]})
         # if "Name" in thing.viewkeys():
@@ -1834,8 +1855,11 @@ def format_details(details):
             "memory": r["memory"],
             "boot_storage_type": r["boot_storage_type"],
             "ephemeral_storage": r["ephemeral_storage"],
-            "weight": r["weight"],
         })
+        if "weight" in r.viewkeys():
+            dicto.update({
+                "weight": r["weight"]
+            })
         if "nat" in r.viewkeys():
             dicto.update({
                 "nat": r["nat"]

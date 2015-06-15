@@ -1309,6 +1309,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
                 # ent = EntityFunctions(db=cloudDB, dbid=0)
                 # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":
+            #TODO you cannot do this on active things
             r = rest.put_rest(UA + spec_uri, convert_post_data_to_cfd(data), headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
                 # options = data
@@ -1371,17 +1372,31 @@ def validate(ent_uuid, acls):
 
 
 def reserve_resources(ent_uuid, acls, return_object):
-    # TODO forward to cfd
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
+    if row["entitytype"] != "vdc":
+        return {"Error": "Invalid entity type: " + str(row["entitytype"])}
     command_options = {"command": "reserve-resources"}
     return api_actions.reserve_resources(cloudDB, row["id"], command_options, row, return_obj=return_object)
 
 
-def provision(ent_uuid, acls, return_obj):  # flag for async
-    # TODO Forward to cfd
+def provision(ent_uuid, acls, return_obj):
+    #TODO container/volume checks?
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
+    status = row["entitystatus"]
+    if row["entitytype"] == "serverfarm":
+        attach_row = cloudDB.execute_db("SELECT * FROM tblAttachedEntities WHERE tblEntities='%s' or tblAttachedEntities.AttachedEntityId='%s'" % (row["id"], row["id"]))
+        if attach_row is None:
+            return {"Error": "Attempt to provision serverfarm that has no attached compute service."}
+    elif row["entitytype"] == "server":
+        server_farm_details = cloudDB.get_row_dict("tblServerFarms", {"tblEntities": row["parententityid"]})
+        server_farm_ent = cloudDB.get_row_dict("tblEntities", {"id": row["parententityid"]})
+        if server_farm_details["Scale_Option"] == "Enabled":
+            return {"Error": "Attempt to provision server whose serverfarm has Auto Scale Enabled"}
+        if server_farm_ent["EntityStatus"] != "Active":
+            return {"Error": "Attempt to provision server whose serverfarm is not active"}
+
     command_options = {"command": "provision"}
     # api_actions.prov2(cloudDB, row["id"], command_options, row)
     return api_actions.provision(cloudDB, row["id"], command_options, row, return_obj)
@@ -1402,12 +1417,16 @@ def activate(ent_uuid, acls, return_object):
     #                             (entity["name"], entity["entitystatus"]), type="Warn")
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
+    if row["entitytype"] != "vdc":
+        return {"Error": "Invalid entity type: " + str(row["entitytype"])}
     command_options = {"command": "activate"}
 
     return api_actions.activate(cloudDB, row["id"], command_options, return_object)
 
 
-def deprovision(ent_uuid, acls):
+def deprovision(ent_uuid, acls): #TODO not async?!?
+    #TODO server and serverfarm specific
+    #TODO container/volume checks?
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     command_options = {"command": "deprovision"}
@@ -1418,6 +1437,8 @@ def destroy(ent_uuid, acls):
     vdc = get_spec_details(ent_uuid, acls)
     if vdc is None:
         return
+    if vdc["entitytype"] != "vdc":
+        return {"Error": "Invalid entity type: " + str(vdc["entitytype"])}
     children_of_vdc = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s'" % vdc["id"])
     print "VDC CHILDREN: " + str(children_of_vdc)
     for child in children_of_vdc:
@@ -1457,14 +1478,14 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
             validation = validate(ent_uuid, acls)
             result = provision(ent_uuid, acls, validation["return_object"])
             return {command: result}
-        elif command == "activate":
+        elif command == "activate": #TODO check conditions
             validation = validate(ent_uuid, acls)
             result = activate(ent_uuid, acls, validation["return_object"])
             return {command: result}
-        elif command == "deprovision":
+        elif command == "deprovision": #TODO check conditions
             res = deprovision(ent_uuid, acls)
             return {command: res}
-        elif command == "destroy":
+        elif command == "destroy": #TODO check conditions
             res = destroy(ent_uuid, acls)
             return {command: res}
     return False

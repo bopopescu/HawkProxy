@@ -16,7 +16,13 @@ department_uuid = "ae5175ea-9194-4d7e-9e0b-595183d468e2"
 head = {"X-Auth-Token": admin_token, "Content-Type": "application/json"}
 
 def post_req(url, json):
-    return requests.post(url, json=json, headers=head)
+    r = requests.post(url, json=json, headers=head)
+    if "error" in str(r.text).lower():
+        print "ERROR IN POST REQUEST"
+        print r.text
+        quit()
+    #print r.text
+    return r
 def put_req(url, json):
     return requests.put(url, json=json, headers=head)
 def get_req(url):

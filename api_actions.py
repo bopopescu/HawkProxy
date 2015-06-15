@@ -112,5 +112,8 @@ def activate(db, dbid, command_options, return_object):
     #return prov.activate_entity(db, dbid, options=command_options)
     #return prov.start_activate_vdc(return_obj)
 
-def deprovision(db, ent_id, command_options):
-    return prov.deprovision_entity(db, ent_id, options=command_options)
+def deprovision(db, dbid, command_options):
+    #return prov.deprovision_entity(db, ent_id, options=command_options)
+    eve = entity.entity_functions.EntityFunctions(db, dbid, quick_provision=True)
+    status = eve.do(db, "command", options=command_options)
+    return status

@@ -50,6 +50,7 @@ cloudDB = CloudGlobalBase(pool=False)
 RES_CODE = "400 Bad Request"
 
 # TODO In all queries, resulting rows can be None if query fails or db connection fails, causing TypeError on len call
+# TODO Why does gui treat api-made vdcs as network service?
 # WITH ALL MYSQL SEARCHES, MAKE SURE ROW DELETED == 0; replace get_row with get_row_dict
 
 def fetch(url):
@@ -191,7 +192,7 @@ def load_owned_objects_rec(ent_id, depth):
 
     print(depth)
 
-    ents = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s'" % (ent_id))
+    ents = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND ParentEntityId='%s'" % (ent_id))
     # if len(ents) == 1:
     if len(ents) == 0 or ents is None:
         return dict()
@@ -214,7 +215,7 @@ def load_owned_objects_rec_nonnest(ent_id, array):
     if ent_id == 0 or ent_id == 1:
         log.critical("This method should not be used with IT")
         return
-    ents = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s'" % (ent_id))
+    ents = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND ParentEntityId='%s'" % (ent_id))
     # if len(ents) == 1:
     if len(ents) is not 0 and ents is not None:
         for ent in ents:
@@ -227,7 +228,7 @@ def load_owned_objects_rec_nonnest_type_limited(ent_id, array, enttype):
     if ent_id == 0 or ent_id == 1:
         log.critical("This method should not be used with IT")
         return
-    ents = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s'" % (ent_id))
+    ents = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND ParentEntityId='%s'" % (ent_id))
     # if len(ents) == 1:
     if len(ents) is not 0 and ents is not None:
         for ent in ents:
@@ -246,7 +247,7 @@ def authorization_object_check_rec(ent_id, uuid_to_compare_to):
     if ent_id == 0 or ent_id == 1:
         log.critical("This method should not be used with IT")
         return
-    ents = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s'" % ent_id)
+    ents = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND ParentEntityId='%s'" % ent_id)
     if len(ents) is not 0 and ents is not None:
         for ent in ents:
             if str(ent["UniqueId"]) in str(uuid_to_compare_to):
@@ -297,7 +298,7 @@ def authorization_object_check_bot_up(obj_ent_id, user_acl_id):
 
 
 def load_all(type):
-    things = cloudDB.get_multiple_row("tblEntities", "EntityType='%s'" % (type))
+    things = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND EntityType='%s'" % (type))
     arr = []
     for thing in things:
         if not (thing["Name"] == "infrastructure" and type == "slice_attached_network"):
@@ -321,11 +322,11 @@ def load_all(type):
 
 def load_system_owned(enttype):
     # load all ilibs that are children of slice
-    slices = cloudDB.get_multiple_row("tblEntities", "EntityType='%s'" % ("slice"))
+    slices = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND EntityType='%s'" % ("slice"))
     objects = []
     for slice in slices:
         things = cloudDB.get_multiple_row("tblEntities",
-                                          "EntityType='%s' AND ParentEntityId='%s'" % (enttype, slice["id"]))
+                                          "deleted=0 AND EntityType='%s' AND ParentEntityId='%s'" % (enttype, slice["id"]))
         for thing in things:
             objects.append(thing)
             # depts = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s' AND EntityType='%s'" % (org["id"], "department"))
@@ -354,11 +355,18 @@ def load_owned(parent_ent_id, type):
     print parent_ent_id
     print type
     arr = []
-    things = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s' AND EntityType='%s'" % (parent_ent_id, type))
+    things = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND ParentEntityId='%s' AND EntityType='%s'" % (parent_ent_id, type))
     for thing in things:
         arr.append(thing)
     return arr
 
+def load_all_owned(parent_ent_id):
+    print parent_ent_id
+    arr = []
+    things = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND ParentEntityId='%s'" % (parent_ent_id))
+    for thing in things:
+        arr.append(thing)
+    return arr
 
 def get_parent_details(child_id):
     child_p_id = cloudDB.get_row_dict("tblEntities", {"id": child_id})["ParentEntityId"]
@@ -628,6 +636,9 @@ def create_interfaces(ent_name, interfaces_array, vdc_id):
 
 
 def convert_post_data_to_cfd(data):
+    if data is None:
+        log.critical("Passed null data")
+        return None
     if "ssh_keys" in data.viewkeys():
         if isinstance(data["ssh_keys"], list):
             new_ssh_keys = []
@@ -662,6 +673,8 @@ def convert_post_data_to_cfd(data):
                         }
                 new_ssh_keys.append(ssh_ent)
             data.update({"ssh_keys": new_ssh_keys})
+    return data
+
 
 def do_ssh_keys_conversion_to_db(options, data):
     if "ssh_keys" in data.viewkeys():
@@ -701,6 +714,7 @@ def do_ssh_keys_conversion_to_db(options, data):
                                 options["ssh_keys"].append(ssh_ent)
                         else:
                             options.update({"ssh_keys": [ssh_ent]})
+
 
 def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", child_details=None):  # parent details
     options = {}
@@ -998,10 +1012,10 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             do_ssh_keys_conversion_to_db(options, data)
             if "metadata" in data.viewkeys():
                 options.update({"metadata": data["metadata"]})
-            #     "HighAvailabilityOptionPolicy": "VDC overrides device", #TODO are these the same key names?
-            #     "SlicePreferencePolicy": "VDC overrides device",
-            #     "VDCPerformancePolicy": "Best Effort",
-            #     "HighAvailabilityOptions": "Default",
+                #     "HighAvailabilityOptionPolicy": "VDC overrides device", #TODO are these the same key names?
+                #     "SlicePreferencePolicy": "VDC overrides device",
+                #     "VDCPerformancePolicy": "Best Effort",
+                #     "HighAvailabilityOptions": "Default",
         elif obj_type == "externalnetwork":
             options.update({"servicetype": "externalNetwork",
                             "entitytype": obj_type, })
@@ -1071,7 +1085,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
 
 def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data, r, s_row):
     options = generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create")
-    ent = EntityFunctions(db=cloudDB, dbid=0, slice_row=s_row)
+    ent = EntityFunctions(db=cloudDB, dbid=0, slice_row=s_row, quick_provision=True)
     entity_res = ent._create(cloudDB, options)
     row = get_spec_details_with_entid(ent.dbid)
     ent.update_all_service_uris(cloudDB, r, slice_url=UA)
@@ -1084,13 +1098,18 @@ def create_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
     return json.dumps(entity_res)
 
 
-def get_entity(obj_type, obj_uuid, details):
+def get_entity(details):
     # print details
     # print obj_type
     # print obj_uuid
-    slice_row = cloudDB.get_row_dict("tblSlices", {"tblEntities": 28}) #TODO is slice id hardcoded?
+    """
+
+    :param details:
+    :return: Returns details with lowercase keys
+    """
+    slice_row = cloudDB.get_row_dict("tblSlices", {"tblEntities": 28})  # TODO is slice id hardcoded?
     slice_row_lower = utils.cloud_utils.lower_key(slice_row)
-    ent = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
+    ent = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower, quick_provision=True)
     ent._status(cloudDB, do_get=True)
     # return format_details(ent.row)
     return ent.row
@@ -1109,7 +1128,7 @@ def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
 
     ent = EntityFunctions(db=cloudDB, dbid=
     get_spec_details_with_parent_id(ent_type, formatted_post_data["name"], parent_vdc_details["id"])["id"],
-                          slice_row=s_row)
+                          slice_row=s_row, quick_provision=True)
     ent._status(cloudDB, generate_options(ent_type, parent_uuid, formatted_post_data, parent_vdc_details, "create"),
                 do_get=True)
     # print "ENTITY ROW: " + str(ent.row)
@@ -1119,7 +1138,21 @@ def update_entity(ent_type, parent_uuid, parent_vdc_details, formatted_post_data
                                child_details=ent.row)
     res = ent._update(cloudDB, options)
     entity.entity_commands.update_multiple(cloudDB, ent.row["id"], options)
-    return res
+    return json.loads(res)
+
+
+def delete_entity(details, slice_row_lower):
+    updated_row = get_entity(details)
+    if updated_row["entitystatus"] != "Ready":
+        return {"Error": "Cannot delete entity that is not ready"}
+    children = load_all_owned(updated_row["id"])
+    if len(children) > 0:
+        return {"Error": "Cannot delete entity that has children"}
+    options = {"parententityid": updated_row["id"]}
+    options.update({"entitytype": updated_row["entitytype"]})
+    entity = EntityFunctions(db=cloudDB, dbid=updated_row["id"], slice_row=slice_row_lower, quick_provision=True)
+    entity_res = entity.do(cloudDB, "delete", options)
+    return json.loads(entity_res)
 
 
 def convert_obj_cont_name(obj_type):
@@ -1257,7 +1290,7 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
         obj_cont_name = convert_obj_cont_name(obj_type)
         obj_type = convert_obj_type_to_db(obj_type)
 
-        slice_row = cloudDB.get_row_dict("tblSlices", {"tblEntities": 28}) #TODO is slice id hardcoded?
+        slice_row = cloudDB.get_row_dict("tblSlices", {"tblEntities": 28})  # TODO is slice id hardcoded?
         slice_row_lower = utils.cloud_utils.lower_key(slice_row)
         headers = {"Content-Type": "clouds.net." + obj_cont_name + "+json"}
         spec_uri = load_spec_uri(bottom_child_details=details)
@@ -1306,49 +1339,33 @@ def perform_action(reqm, details, obj_uuid, obj_type, user_data, post_data):
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
                 entity_res = create_entity(obj_type, obj_uuid, details, data, r, slice_row_lower)
                 RES_CODE = "201 Created"
+                return format_details(get_entity(details))
                 # ent = EntityFunctions(db=cloudDB, dbid=0)
                 # ent.update_all_service_uris(cloudDB, r, slice_url=UA)
         elif reqm == "PUT":
-            #TODO you cannot do this on active things
+            # TODO you cannot do this on active things
             r = rest.put_rest(UA + spec_uri, convert_post_data_to_cfd(data), headers)
             if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                # options = data
-                # print options
                 VDC = get_parent_details(details["id"])
-                # entity = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
-                # # print options
-                # # print entity._update(cloudDB, options, do_get=True)
-                # entity_res = entity._update(cloudDB, options)  # TODO This does not update throughputs
-                #
-                # entity.entity_commands.update_multiple(cloudDB, details["id"], options)
                 entity_res = update_entity(obj_type, VDC["UniqueId"], VDC, data, slice_row_lower)
                 RES_CODE = "202 Accepted"
+                return format_details(get_entity(details))
         elif reqm == "GET":
             RES_CODE = "200 OK"
-            r = rest.get_rest(UA + spec_uri, headers)
-            # entity_res = get_entity(obj_type, obj_uuid, details, slice_row_lower)
-            entity_res = json.dumps({"uuid": details["UniqueId"]})
-            return format_details(get_entity(details["EntityType"], details["UniqueId"], details))
+            return format_details(get_entity(details))
         elif reqm == "DELETE":
-            #TODO only if status is ready
-            #TODO if active children, dont delete
-            r = rest.delete_rest(UA + spec_uri, headers)
-            if r["http_status_code"] == 200 or r["http_status_code"] == 201 or r["http_status_code"] == 202:
-                options = {"parententityid": details["id"]}
-                options.update({"entitytype": obj_type})
-                entity = EntityFunctions(db=cloudDB, dbid=details["id"], slice_row=slice_row_lower)
-                entity_res = entity._delete(cloudDB, options)
-                RES_CODE = "202 Accepted"
-        try:
-            created_entity_uri = r["uri"]
-        except:
-            # print sys.exc_info()
-            if reqm != "DELETE" and obj_type != "network_interface":
-                return "ERROR: Incorrect/Empty CFD Response: " + str(r)
+            RES_CODE = "202 Accepted"
+            return delete_entity(details, slice_row_lower)
+        # try:
+        #     created_entity_uri = r["uri"]
+        # except:
+        #     # print sys.exc_info()
+        #     if reqm != "DELETE" and obj_type != "network_interface":
+        #         return "ERROR: Incorrect/Empty CFD Response: " + str(r)
 
-        print entity_res
-        comp_res = {"CFD": r, "HAWK-DB": json.loads(entity_res)}
-        return comp_res
+        # print entity_res
+        # comp_res = {"CFD": r, "HAWK-DB": json.loads(entity_res)}
+        # return comp_res
         # return "CFD RESPONSE:\n" + json.dumps(r, sort_keys=True, indent=4, separators=(',', ': ')) + "\nHAWK-DB RESPONSE:\n" + str(entity_res)
 
     return False
@@ -1361,7 +1378,7 @@ def validate(ent_uuid, acls):
     hawk_validation = api_actions.validate_vdc(cloudDB, row["id"], command_options, row)
     vdc_uri = load_spec_uri(get_spec_details(ent_uuid, acls))
     r = rest.put_rest(UA + vdc_uri, {"command": "reserve-resources"})
-    get_entity("vdc", ent_uuid, row)
+    get_entity(row)
     # r2 = rest.get_rest(UA + vdc_uri)
     print r
     if "resources" in r.viewkeys():
@@ -1381,12 +1398,13 @@ def reserve_resources(ent_uuid, acls, return_object):
 
 
 def provision(ent_uuid, acls, return_obj):
-    #TODO container/volume checks?
+    # TODO do we need to check status of entity we are trying to provision?
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
-    status = row["entitystatus"]
     if row["entitytype"] == "serverfarm":
-        attach_row = cloudDB.execute_db("SELECT * FROM tblAttachedEntities WHERE tblEntities='%s' or tblAttachedEntities.AttachedEntityId='%s'" % (row["id"], row["id"]))
+        attach_row = cloudDB.execute_db(
+            "SELECT * FROM tblAttachedEntities WHERE tblEntities='%s' or tblAttachedEntities.AttachedEntityId='%s'" % (
+            row["id"], row["id"]))
         if attach_row is None:
             return {"Error": "Attempt to provision serverfarm that has no attached compute service."}
     elif row["entitytype"] == "server":
@@ -1396,6 +1414,10 @@ def provision(ent_uuid, acls, return_obj):
             return {"Error": "Attempt to provision server whose serverfarm has Auto Scale Enabled"}
         if server_farm_ent["EntityStatus"] != "Active":
             return {"Error": "Attempt to provision server whose serverfarm is not active"}
+    elif row["entitytype"] == "volume":
+        container_ent = cloudDB.get_row_dict("tblEntities", {"id": row["parententityid"]})
+        if container_ent["EntityStatus"] != "Active":
+            return {"Error": "Attempt to provision volume whose container is not active"}
 
     command_options = {"command": "provision"}
     # api_actions.prov2(cloudDB, row["id"], command_options, row)
@@ -1403,18 +1425,6 @@ def provision(ent_uuid, acls, return_obj):
 
 
 def activate(ent_uuid, acls, return_object):
-    # check that the vdc is in the proper state, eg provisioned
-    # if entity["entitystatus"].lower() == "suspended":
-    #     dashboard.update_vdc_entitystatus(db, "Resuming")
-    #     dashboard.register_event(db)
-    #     status = resume_vdc(db, return_object)
-    #
-    # elif entity["entitystatus"].lower() == "provisioned":
-    #     status = activate_vdc(db, return_object)
-    # else:
-    #     dashboard.final(db, "Please retry", "error")
-    #     cloud_utils.log_message(db, dbid, "%s: Unable to process command due to current state: %s" %
-    #                             (entity["name"], entity["entitystatus"]), type="Warn")
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
     if row["entitytype"] != "vdc":
@@ -1424,11 +1434,32 @@ def activate(ent_uuid, acls, return_object):
     return api_actions.activate(cloudDB, row["id"], command_options, return_object)
 
 
-def deprovision(ent_uuid, acls): #TODO not async?!?
-    #TODO server and serverfarm specific
-    #TODO container/volume checks?
+def deprovision(ent_uuid, acls):  # TODO not async?!?
     row = get_spec_details(ent_uuid, acls)
     row = dict_keys_to_lower(row)
+    if row["entitytype"] == "serverfarm":
+        servers = load_owned(row["id"], "server")
+        any_active = False
+        for server in servers:
+            if server["EntityStatus"] != "Ready":
+                any_active = True
+                break
+        if any_active:
+            return {"Error": "Cannot deprovision serverfarm that has active servers"}
+    elif row["entitytype"] == "server":
+        server_farm_details = cloudDB.get_row_dict("tblServerFarms", {"tblEntities": row["parententityid"]})
+        if server_farm_details["Scale_Option"] == "Enabled":
+            return {"Error": "Cannot deprovision server whose serverfarm has Auto Scale Enabled"}
+    elif row["entitytype"] == "container":
+        volumes = load_owned(row["id"], "volume")
+        any_active = False
+        for vol in volumes:
+            if vol["EntityStatus"] != "Ready":
+                any_active = True
+                break
+        if any_active:
+            return {"Error": "Cannot deprovision container that has active volumes"}
+
     command_options = {"command": "deprovision"}
     return api_actions.deprovision(cloudDB, row["id"], command_options)
 
@@ -1437,9 +1468,9 @@ def destroy(ent_uuid, acls):
     vdc = get_spec_details(ent_uuid, acls)
     if vdc is None:
         return
-    if vdc["entitytype"] != "vdc":
+    if vdc["EntityType"] != "vdc":
         return {"Error": "Invalid entity type: " + str(vdc["entitytype"])}
-    children_of_vdc = cloudDB.get_multiple_row("tblEntities", "ParentEntityId='%s'" % vdc["id"])
+    children_of_vdc = cloudDB.get_multiple_row("tblEntities", "deleted=0 AND ParentEntityId='%s'" % vdc["id"])
     print "VDC CHILDREN: " + str(children_of_vdc)
     for child in children_of_vdc:
         if child["EntityType"] != "container":
@@ -1478,14 +1509,14 @@ def special_action(ent_type, split, reqm, acls, userData, post_data):
             validation = validate(ent_uuid, acls)
             result = provision(ent_uuid, acls, validation["return_object"])
             return {command: result}
-        elif command == "activate": #TODO check conditions
+        elif command == "activate":  # TODO check conditions
             validation = validate(ent_uuid, acls)
             result = activate(ent_uuid, acls, validation["return_object"])
             return {command: result}
-        elif command == "deprovision": #TODO check conditions
+        elif command == "deprovision":  # TODO check conditions
             res = deprovision(ent_uuid, acls)
             return {command: res}
-        elif command == "destroy": #TODO check conditions
+        elif command == "destroy":  # TODO check conditions
             res = destroy(ent_uuid, acls)
             return {command: res}
     return False
@@ -1541,7 +1572,7 @@ def add_elements(things):
     #     return dicto
     for thing in things:
         onedic = {}
-        #onedic.update(thing)
+        # onedic.update(thing)
         for key, val in thing.iteritems():
             if key != "uri":
                 onedic.update({key: val})
@@ -1873,11 +1904,14 @@ def format_details(details):
                 snets = add_elements(subnets)
                 dicto.update({"subnets": snets})
 
-        #dicto.update(r)
+                # dicto.update(r)
     else:
         for item in details.iteritems():
             dicto.update({str(item[0]): str(item[1])})
-    dicto.pop("http_status_code")
+
+    if "http_status_code" in dicto.viewkeys():
+        dicto.pop("http_status_code")
+
     return dicto
 
 
@@ -1894,6 +1928,8 @@ def request_api(addr, userData, reqm, post_data):
 
     user_ent_id = userData["tblEntities"]
     acls = cloudDB.get_multiple_row("tblEntitiesACL", "tblEntities='%s'" % (user_ent_id))
+    if acls is None:
+        return False
     aclID = acls[0]["AclEntityId"]
     aclRole = get_acl_role(aclID)
 
@@ -1965,7 +2001,7 @@ def request_api(addr, userData, reqm, post_data):
                                 print details["EntityType"]
                                 print split[0]
                                 return False
-                        return format_details(get_entity(details["EntityType"], details["UniqueId"], details))
+                        return format_details(get_entity(details))
                         # return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
@@ -2016,7 +2052,7 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in convert_obj_type_to_db(split[0]):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_entity(details["EntityType"], details["UniqueId"], details)
+                        return get_entity(details)
                         # return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
@@ -2040,7 +2076,7 @@ def request_api(addr, userData, reqm, post_data):
 
 
         elif aclRole == "department":
-            acls = cloudDB.get_multiple_row("tblEntitiesACL", "tblEntities='%s'" % (user_ent_id))
+            acls = cloudDB.get_multiple_row("tblEntitiesACL", "deleted=0 AND tblEntities='%s'" % (user_ent_id))
             resultantData = []
             canSeeDetails = False
             if len(split) >= 2:
@@ -2087,7 +2123,7 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in convert_obj_type_to_db(split[0]):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_entity(details["EntityType"], details["UniqueId"], details)
+                        return get_entity(details)
                         # return get_dict_details(details)
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
@@ -2112,7 +2148,7 @@ def request_api(addr, userData, reqm, post_data):
 
 
         elif aclRole == "vdc":
-            acls = cloudDB.get_multiple_row("tblEntitiesACL", "tblEntities='%s'" % (user_ent_id))
+            acls = cloudDB.get_multiple_row("tblEntitiesACL", "deleted=0 AND tblEntities='%s'" % (user_ent_id))
             resultantData = []
             canSeeDetails = False
             if len(split) >= 2:
@@ -2161,7 +2197,7 @@ def request_api(addr, userData, reqm, post_data):
                         if details["EntityType"] not in convert_obj_type_to_db(split[0]):
                             # makes sure you cant ask dept details and give vdc uuid
                             return False
-                        return get_entity(details["EntityType"], details["UniqueId"], details)
+                        return get_entity(details)
                         # return get_dict_details(details)
 
     return False
@@ -2236,7 +2272,7 @@ def serve(env, start_response):
             try:
                 user = escape(data.get("user")[0])
                 passw = escape(data.get("pass")[0])
-                #dname = escape(data.get("domain")[0])
+                # dname = escape(data.get("domain")[0])
             except (TypeError):
                 start_response('400 Bad Request', defresponse_header)
                 return oman.no_post_data()

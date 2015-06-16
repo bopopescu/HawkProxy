@@ -1605,9 +1605,10 @@ def add_elements(things, ent_type):
     for thing in things:
         onedic = {}
         # onedic.update(thing)
-        # for key, val in thing.iteritems():
-        #     if key != "uri":
-        #         onedic.update({key: str(val)})
+        if ent_type == "address":
+            for key, val in thing.iteritems():
+                if key != "uri":
+                    onedic.update({key: str(val)})
         if "name" in thing.viewkeys():
             onedic.update({"name": thing["name"]})
         elif "Name" in thing.viewkeys():
@@ -1930,9 +1931,36 @@ def format_details(details):
         if "backup_params" in r.viewkeys():
             dicto.update({"backup_params": r["backup_params"]})
     elif details["entitytype"] == "slice_attached_network":
-        print "TODO"
         dicto.update(r)
-        #todo
+        if "address_pool" in r.viewkeys():
+            dicto.pop("address_pool")
+            all_addresses = []
+            if isinstance(r["address_pool"], list):
+                if "foreign_addresses" in r.viewkeys():
+                    used_addresses = []
+                    open_addresses = []
+                    # fo_adds = r["foreign_addresses"]
+                    # foadd_split = fo_adds.split('.')
+                    # last = foadd_split[3]
+                    # last_s = last.split("-") #TODO will this always work
+                    # add_start = last_s[0]
+                    # end_start = last_s[-1]
+                    for addr in r["address_pool"]:
+                        if len(addr) > 1:
+                            used_addresses.append(addr)
+                        else:
+                            open_addresses.append(addr)
+                    all_addresses += used_addresses
+                    if len(open_addresses) > 0:
+                        first_open = open_addresses[0]["foreign_address"].split(".")[3]
+                        last_open = open_addresses[-1]["foreign_address"].split(".")[3]
+                        split = open_addresses[0]["foreign_address"].split(".")
+                        begin_part = split[0]+'.'+split[1]+'.'+split[2]+'.'
+                        all_addresses += [{"foreign_address": begin_part + first_open + '-' + last_open}]
+            adds = add_elements(all_addresses, "address")
+            dicto.update({"address_pool": adds})
+        if "uri" in dicto.viewkeys():
+            dicto.pop("uri")
     elif details["entitytype"] == "security_group":
         sec_rules = load_owned(details["id"], "security_rule")
         security_rules = add_elements(sec_rules, "security_rule")
@@ -2346,15 +2374,17 @@ def serve(env, start_response):
             except (ValueError):
                 request_body_size = 0
             request_body = env['wsgi.input'].read(request_body_size)
-            data = parse_qs(request_body)
+            data = request_body#parse_qs(request_body)
             if len(data) == 0:
                 start_response('400 Bad Request', defresponse_header)
                 return oman.no_post_data()
             try:
-                user = escape(data.get("user")[0])
-                passw = escape(data.get("pass")[0])
-                # dname = escape(data.get("domain")[0])
-            except (TypeError):
+                data = json.loads(data)
+                print data
+                user = escape(data["user"])
+                passw = escape(data["pass"])
+            except:
+                print sys.exc_info()
                 start_response('400 Bad Request', defresponse_header)
                 return oman.no_post_data()
             tokenResp = get_token_json_response(user, passw)

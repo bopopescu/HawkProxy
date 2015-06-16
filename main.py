@@ -390,14 +390,13 @@ def load_all_available(vdc_id, enttype):
         enttype)
 
 
-def load_auth_dep_vir_nets(vdc_id):
+def load_auth_spec_vir_nets(child_id):
     enttype = "virtual_network"
-    first = cloudDB.get_multiple_row("tblAttachedEntities", "AttachedEntityId='%s'" % vdc_id)
+    first = cloudDB.get_multiple_row("tblAttachedEntities", "AttachedEntityId='%s'" % child_id)
     if len(first) == 0:
         return []
     virnets = []
     for att in first:
-        print att
         virnets.append(cloudDB.get_row_dict("tblEntities", {"id": att["tblEntities"]}))
     return virnets
 
@@ -406,10 +405,11 @@ def load_all_available_vir_nets(vdc_id):
     # needs to return system libraries and libraries owned by parent department and by organization
     # assumming that ent_id_parent is department id since that is the parent of a vdc
     dept_id = get_parent_details(vdc_id)["id"]
-    org_id = get_parent_details(dept_id)["id"]
+    #org_id = get_parent_details(dept_id)["id"]
     enttype = "virtual_network"
-    dept_spec = load_auth_dep_vir_nets(vdc_id)
-    return load_owned(vdc_id, enttype) + load_owned(org_id, enttype) + dept_spec
+    dept_spec = load_auth_spec_vir_nets(vdc_id)
+    org_spec = load_auth_spec_vir_nets(dept_id)
+    return load_owned(vdc_id, enttype) + org_spec + dept_spec
 
 
 # def json_list_objects_arr(address, givens, aclRole): # THIS NEEDS TO PROVIDE ERROR IF RESPONSE IS BLANK!!!
@@ -546,7 +546,10 @@ def get_spec_details(obj_uuid, acls, canSeeDetails=False):
 
 
 def get_spec_details_with_parent_id(ent_type, name, parent_id):
-    return cloudDB.get_row_dict("tblEntities", {"EntityType": ent_type, "Name": name, "ParentEntityId": parent_id})
+    return cloudDB.get_row_dict("tblEntities", {"Name": name, "ParentEntityId": parent_id})
+
+def get_spec_details_with_parent_id_notype(name, parent_id):
+    return cloudDB.get_row_dict("tblEntities", {"Name": name, "ParentEntityId": parent_id})
 
 
 def get_spec_details_with_entid(ent_id):
@@ -1035,7 +1038,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
             except KeyError:
                 seq_num = ""
             try:
-                thruput = data["params"]["throughput"]
+                thruput = data["params"]["throughput"] #TODO throughput vs throughputinc
             except KeyError:
                 thruput = ""
             try:
@@ -1584,8 +1587,14 @@ def get_dict_details(details):
     dicto.update({"Name": details["Name"], "Description": details["Description"]})
     return {details["EntityType"]: dicto}
 
+def add_vdc_elements(things, vdc_id, ent_type):
+    for thing in things:
+        if "name" in thing.viewkeys():
+            row = get_spec_details_with_parent_id(None, thing["name"], vdc_id)
+            thing.update({"uuid": row["UniqueId"]})
+    return add_elements(things, ent_type)
 
-def add_elements(things):
+def add_elements(things, ent_type):
     dicto = {"elements": []}
     if things is None:
         return dicto
@@ -1594,23 +1603,25 @@ def add_elements(things):
     for thing in things:
         onedic = {}
         # onedic.update(thing)
-        for key, val in thing.iteritems():
-            if key != "uri":
-                onedic.update({key: str(val)})
-        # if "name" in thing.viewkeys():
-        #     onedic.update({"name": thing["name"]})
-        # if "Name" in thing.viewkeys():
-        #     onedic.update({"name": thing["Name"]})
-        # if "uniqueid" in thing.viewkeys():
-        #     onedic.update({"uuid": thing["uniqueid"]})
-        # if "UniqueId" in thing.viewkeys():
-        #     onedic.update({"uuid": thing["UniqueId"]})
+        # for key, val in thing.iteritems():
+        #     if key != "uri":
+        #         onedic.update({key: str(val)})
+        if "name" in thing.viewkeys():
+            onedic.update({"name": thing["name"]})
+        elif "Name" in thing.viewkeys():
+            onedic.update({"name": thing["Name"]})
+        if "uniqueid" in thing.viewkeys():
+            onedic.update({"uuid": thing["uniqueid"]})
+        elif "UniqueId" in thing.viewkeys():
+            onedic.update({"uuid": thing["UniqueId"]})
+        elif "uuid" in thing.viewkeys():
+            onedic.update({"uuid": thing["uuid"]})
+        #TODO add type
         if len(onedic) > 0:
             dicto["elements"].append(onedic)
 
     if len(things) > 0:
-        if "EntityType" in things[0].viewkeys():
-            dicto.update({"type": things[0]["EntityType"]})
+        dicto.update({"type": ent_type})
     dicto.update({"total": len(things)})
     return dicto
 
@@ -1702,9 +1713,9 @@ def format_details(details):
     do_interface_addition(dicto, r)
 
     if details["entitytype"] == "organization":
-        depts = add_elements(load_owned(details["id"], "department"))
-        imglibs = add_elements(load_owned(details["id"], "imagelibrary"))
-        virnets = add_elements(load_owned(details["id"], "virtual_network"))
+        depts = add_elements(load_owned(details["id"], "department"), "department")
+        imglibs = add_elements(load_owned(details["id"], "imagelibrary"), "imagelibrary")
+        virnets = add_elements(load_owned(details["id"], "virtual_network"), "virtual_network")
 
         dicto.update({
             "location": details["location"],
@@ -1723,9 +1734,9 @@ def format_details(details):
             "virtual-networks": virnets
         })
     elif details["entitytype"] == "department":
-        vdcs = add_elements(load_owned(details["id"], "department"))
-        imglibs = add_elements(load_owned(details["id"], "imagelibrary"))
-        virnets = add_elements(load_owned(details["id"], "virtual_network"))
+        vdcs = add_elements(load_owned(details["id"], "vdc"), "vdc")
+        imglibs = add_elements(load_owned(details["id"], "imagelibrary"), "imagelibrary")
+        virnets = add_elements(load_owned(details["id"], "virtual_network"), "virtual_network")
         dicto.update({
             "location": details["location"],
             "administrator-name": details["administrator"],
@@ -1764,10 +1775,12 @@ def format_details(details):
             dicto.update({"autoscale": r["autoscale"]})
         if "cfm" in r.viewkeys():
             dicto.update({"cfm": r["cfm"]})
-        dicto.update({
-            "provisioned": "???",
-            "deployed": "???",
-        })
+        if "service_status" in r.viewkeys() and "params" in r.viewkeys():
+            inst_count = r["service_status"]["current_instances_count"]
+            max_inst_count = r["params"]["max_instances_count"]
+            thruput = r["params"]["throughput"]
+            dicto.update({"deployed": inst_count * thruput})
+            dicto.update({"provisioned": max_inst_count * thruput})
     elif details["entitytype"] == "lbs_network_service":
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
@@ -1777,20 +1790,24 @@ def format_details(details):
             dicto.update({"lbs_mode": r["lbs_mode"]})
         if "cfm" in r.viewkeys():
             dicto.update({"cfm": r["cfm"]})
-        dicto.update({
-            "provisioned": "???",
-            "deployed": "???",
-        })
+        if "service_status" in r.viewkeys() and "params" in r.viewkeys():
+            inst_count = r["service_status"]["current_instances_count"]
+            max_inst_count = r["params"]["max_instances_count"]
+            thruput = r["params"]["throughput"]
+            dicto.update({"deployed": inst_count * thruput})
+            dicto.update({"provisioned": max_inst_count * thruput})
 
     elif details["entitytype"] == "rts_network_service":
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
         if "autoscale" in r.viewkeys():
             dicto.update({"autoscale": r["autoscale"]})
-        dicto.update({
-            "provisioned": "???",
-            "deployed": "???",
-        })
+        if "service_status" in r.viewkeys() and "params" in r.viewkeys():
+            inst_count = r["service_status"]["current_instances_count"]
+            max_inst_count = r["params"]["max_instances_count"]
+            thruput = r["params"]["throughput"]
+            dicto.update({"deployed": inst_count * thruput})
+            dicto.update({"provisioned": max_inst_count * thruput})
     elif details["entitytype"] == "ipsecvpn_network_service":
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
@@ -1806,17 +1823,17 @@ def format_details(details):
     elif details["entitytype"] == "compute_network_service":
         # dicto.update(r)
         if "serverfarm" in r.viewkeys():
-            farms = add_elements(r["serverfarm"]["elements"])
+            farms = add_elements(r["serverfarm"]["elements"], "serverfarm")
             dicto.update({"serverfarms": farms})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
         if "userdata" in r.viewkeys():
             dicto.update({"userdata": r["userdata"]})
         if "ssh_keys" in r.viewkeys():
-            keys = add_elements(r["ssh_keys"])
+            keys = add_elements(r["ssh_keys"], "ssh_key")
             dicto.update({"ssh_keys": keys})
         if "metadata" in r.viewkeys():
-            metadatas = add_elements(r["metadata"])
+            metadatas = add_elements(r["metadata"], "metadata")
             dicto.update({"metadata": metadatas})
     elif details["entitytype"] == "serverfarm":
         if "scale_option" in r.viewkeys():
@@ -1839,10 +1856,10 @@ def format_details(details):
         if "userdata" in r.viewkeys():
             dicto.update({"userdata": r["userdata"]})
         if "ssh_keys" in r.viewkeys():
-            keys = add_elements(r["ssh_keys"])
+            keys = add_elements(r["ssh_keys"], "ssh_key")
             dicto.update({"ssh_keys": keys})
         if "metadata" in r.viewkeys():
-            metadatas = add_elements(r["metadata"])
+            metadatas = add_elements(r["metadata"], "metadata")
             dicto.update({"metadata": metadatas})
         dicto.update({
             "compute_service": "???TODO",  # TODO HOW TO GET THIS
@@ -1881,10 +1898,10 @@ def format_details(details):
         if "userdata" in r.viewkeys():
             dicto.update({"userdata": r["userdata"]})
         if "ssh_keys" in r.viewkeys():
-            keys = add_elements(r["ssh_keys"])
+            keys = add_elements(r["ssh_keys"], "ssh_key")
             dicto.update({"ssh_keys": keys})
         if "metadata" in r.viewkeys():
-            metadatas = add_elements(r["metadata"])
+            metadatas = add_elements(r["metadata"], "metadata")
             dicto.update({"metadata": metadatas})
         if "xvpvnc_url" in r.viewkeys():
             dicto.update({
@@ -1896,7 +1913,7 @@ def format_details(details):
             })
     elif details["entitytype"] == "container":
         r.pop("successful")
-        dicto.update(r)
+        #dicto.update(r)
     elif details["entitytype"] == "volume":
         if "volume_type" in r.viewkeys():
             dicto.update({"volume_type": r["volume_type"]})
@@ -1906,26 +1923,39 @@ def format_details(details):
             dicto.update({"snapshot_params": r["snapshot_params"]})
         if "backup_params" in r.viewkeys():
             dicto.update({"backup_params": r["backup_params"]})
+    elif details["entitytype"] == "slice_attached_network":
+        print "TODO"
+        dicto.update(r)
+        #todo
     elif details["entitytype"] == "vdc":
         for key, val in r.iteritems():
             if not isinstance(val, dict) and not isinstance(val, list):
                 if "uri" not in str(key):
                     dicto.update({key: val})
+        if "storage_uri" in r.viewkeys():
+            r2 = rest.get_rest(UA + r["storage_uri"])
+            if r2["http_status_code"] == 200:
+                if r2["containers"]["total"] > 0:
+                    cs = r2["containers"]["elements"]
+                    elements = []
+                    for cont in cs:
+                        elements.append({"name": cont["name"]})
+                    r.update({"containers": {"total": len(elements), "elements": elements}})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
-        types = ["subnets", "external_networks", "nats", "firewalls", "loadbalancers", "routers", "ipss", "vpns"]
+        types = ["subnets", "external_networks", "nats", "firewalls", "loadbalancers", "routers", "ipss", "vpns", "network_monitors", "containers"]
         for t in types:
             if t in r.viewkeys():
                 if r[t]["total"] == 0:
                     ents = []
                 else:
                     ents = r[t]["elements"]
-                conf_ents = add_elements(ents)
+                conf_ents = add_vdc_elements(ents, details["id"], t[:-1])
                 dicto.update({t: conf_ents})
         if "subnets" in r.viewkeys():
             if r["subnets"]["total"] > 0:
                 subnets = r["subnets"]["elements"]
-                snets = add_elements(subnets)
+                snets = add_elements(subnets, "subnet")
                 dicto.update({"subnets": snets})
 
                 # dicto.update(r)
@@ -1972,6 +2002,7 @@ def request_api(addr, userData, reqm, post_data):
     for part in split:
         if part in duplicate_specific_action_addresses and len(split) > 1:
             if split[0] in duplicate_specific_action_addresses or split[1] in duplicate_specific_action_addresses:
+                #if reqm != "GET" and len(split) < 3:
                 if reqm != "GET" and len(split) < 3:
                     return special_process(part, split, reqm, acls, userData, post_data)
         if part in specific_action_addresses and len(split) < 3:
@@ -2005,13 +2036,15 @@ def request_api(addr, userData, reqm, post_data):
                 if split[0] == "organizations":
                     object_type = "organization"
                 elif split[0] == "external-networks":
-                    object_type = "externalnetwork"
+                    object_type = "slice_attached_network"
                 elif split[0] == "image-libraries":
                     object_type = "imagelibrary"
                 else:
                     return False
-
-                data.append(load_all(object_type))
+                if object_type == "imagelibrary":
+                    data.append(load_system_owned("imagelibrary"))
+                else:
+                    data.append(load_all(object_type))
                 if len(data) > 0:
                     return json_list_objects_arr(addr, data, aclRole)
             else:
@@ -2023,8 +2056,9 @@ def request_api(addr, userData, reqm, post_data):
                                 0] == "external-networks"):
                                 # makes sure you cant ask dept details and give vdc uuid.
                                 print details["EntityType"]
-                                print split[0]
-                                return False
+                                print convert_obj_type_to_db(split[0])
+                                # TODO Fix this
+                                #return False
                         return format_details(get_entity(details))
                         # return get_dict_details(details)
 

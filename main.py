@@ -1836,6 +1836,9 @@ def format_details(details):
             metadatas = add_elements(r["metadata"], "metadata")
             dicto.update({"metadata": metadatas})
     elif details["entitytype"] == "serverfarm":
+        child_servers = load_all_owned(details["id"])
+        servers = add_elements(child_servers, "server")
+        dicto.update({"servers": servers})
         if "scale_option" in r.viewkeys():
             dicto.update({
                 "scale_option": details["scale_option"],
@@ -1912,8 +1915,9 @@ def format_details(details):
                 "novnc_url": r["novnc_url"]
             })
     elif details["entitytype"] == "container":
-        r.pop("successful")
-        #dicto.update(r)
+        child_volumes = load_all_owned(details["id"])
+        vols = add_elements(child_volumes, "volume")
+        dicto.update({"volumes": vols}) #if needed, containers have cfd uris
     elif details["entitytype"] == "volume":
         if "volume_type" in r.viewkeys():
             dicto.update({"volume_type": r["volume_type"]})
@@ -1932,15 +1936,18 @@ def format_details(details):
             if not isinstance(val, dict) and not isinstance(val, list):
                 if "uri" not in str(key):
                     dicto.update({key: val})
-        if "storage_uri" in r.viewkeys():
-            r2 = rest.get_rest(UA + r["storage_uri"])
-            if r2["http_status_code"] == 200:
-                if r2["containers"]["total"] > 0:
-                    cs = r2["containers"]["elements"]
-                    elements = []
-                    for cont in cs:
-                        elements.append({"name": cont["name"]})
-                    r.update({"containers": {"total": len(elements), "elements": elements}})
+        # if "storage_uri" in r.viewkeys(): #TODO is this necessary or can we just use db, like container colume loading?
+        #     r2 = rest.get_rest(UA + r["storage_uri"])
+        #     if r2["http_status_code"] == 200:
+        #         if r2["containers"]["total"] > 0:
+        #             cs = r2["containers"]["elements"]
+        #             elements = []
+        #             for cont in cs:
+        #                 elements.append({"name": cont["name"]})
+        #             r.update({"containers": {"total": len(elements), "elements": elements}}) #0.9-1 sec
+        child_containers = load_owned(details["id"], "container")
+        conts = add_elements(child_containers, "container")
+        dicto.update({"containers": conts})
         if "params" in r.viewkeys():
             dicto.update({"params": r["params"]})
         types = ["subnets", "external_networks", "nats", "firewalls", "loadbalancers", "routers", "ipss", "vpns", "network_monitors", "containers"]

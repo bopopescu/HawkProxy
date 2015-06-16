@@ -1233,6 +1233,8 @@ def convert_obj_type_to_db(obj_type):
         obj_type = "switch_network_service"
     elif obj_type == "nats":
         obj_type = "nat_network_service"
+    elif obj_type == "image-libraries":
+        obj_type = "imagelibrary"
     elif obj_type == "external-networks":  # TODO ?!?!?!?!! does this mean to say external-network-service
         obj_type = "slice_attached_network"
     elif obj_type == "firewalls":
@@ -1262,7 +1264,7 @@ def convert_obj_type_to_db(obj_type):
     elif obj_type == "acl-rules":
         obj_type = "acl_rule"
     elif obj_type == "load-balancer-groups":
-        obj_type = "lbs-group"
+        obj_type = "lbs_group"
     elif obj_type == "load-balancer-services":
         obj_type = "lbs_service"
     elif obj_type == "vpn-groups":
@@ -1931,6 +1933,33 @@ def format_details(details):
         print "TODO"
         dicto.update(r)
         #todo
+    elif details["entitytype"] == "security_group":
+        sec_rules = load_owned(details["id"], "security_rule")
+        security_rules = add_elements(sec_rules, "security_rule")
+        dicto.update({"security_rules": security_rules})
+    elif details["entitytype"] == "security_rule":
+        dicto.update(r)
+        if "successful" in dicto.viewkeys():
+            dicto.pop("successful")
+        if "uri" in dicto.viewkeys():
+            dicto.pop("uri")
+    elif details["entitytype"] == "acl_group":
+        child_aclrs = load_owned(details["id"], "acl_rule")
+        aclrs = add_elements(child_aclrs, "acl_rule")
+        dicto.update({"acl_rules": aclrs})
+    elif details["entitytype"] == "acl_rule":
+        dicto.update(r)
+        if "uri" in dicto.viewkeys():
+            dicto.pop("uri")
+    elif details["entitytype"] == "lbs_group":
+        #dicto.update(r)
+        child_lbss = load_owned(details["id"], "lbs_service")
+        lbss = add_elements(child_lbss, "lbs_service")
+        dicto.update({"load_balancer_services": lbss})
+    elif details["entitytype"] == "lbs_service":
+        dicto.update(r)
+        if "uri" in dicto.viewkeys():
+            dicto.pop("uri")
     elif details["entitytype"] == "vdc":
         for key, val in r.iteritems():
             if not isinstance(val, dict) and not isinstance(val, list):
@@ -2012,7 +2041,7 @@ def request_api(addr, userData, reqm, post_data):
                 #if reqm != "GET" and len(split) < 3:
                 if reqm != "GET" and len(split) < 3:
                     return special_process(part, split, reqm, acls, userData, post_data)
-        if part in specific_action_addresses and len(split) < 3:
+        if part in specific_action_addresses and len(split) < 3: #TODO Get rid of len limitation and take care in special_process
             return special_process(part, split, reqm, acls, userData, post_data)
         if "vdcs" in part and (reqm == "PUT" or reqm == "DELETE") and len(split) < 3:
             return special_process(part, split, reqm, acls, userData, post_data)
@@ -2071,13 +2100,8 @@ def request_api(addr, userData, reqm, post_data):
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
-                        object_type = split[2][:-1]
-                        if object_type == "external-network":
-                            object_type = "slice_attached_network"
-                        elif object_type == "image-librarie":
-                            object_type = "imagelibrary"
-                        elif object_type == "virtual-network":
-                            object_type = "virtual_network"
+                        object_type = split[2]
+                        object_type = convert_obj_type_to_db(object_type)
 
                         if object_type == "imagelibrary" and split[0] == "vdcs":
                             data.append(load_all_available(vdc_id=ent_id_parent, enttype=object_type))
@@ -2122,13 +2146,8 @@ def request_api(addr, userData, reqm, post_data):
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
-                        object_type = split[2][:-1]
-                        if object_type == "external-network":
-                            object_type = "slice_attached_network"
-                        elif object_type == "image-librarie":
-                            object_type = "imagelibrary"
-                        elif object_type == "virtual-network":
-                            object_type = "virtual_network"
+                        object_type = split[2]
+                        object_type = convert_obj_type_to_db(object_type)
 
                         if object_type == "imagelibrary" and split[0] == "vdcs":
                             data.append(load_all_available(vdc_id=ent_id_parent, enttype=object_type))
@@ -2193,11 +2212,8 @@ def request_api(addr, userData, reqm, post_data):
 
                     elif len(split) == 3:  # details about nested thing like departments/uuid/vdcs
                         ent_id_parent = details["id"]
-                        object_type = split[2][:-1]
-                        if object_type == "image-librarie":
-                            object_type = "imagelibrary"
-                        elif object_type == "virtual-network":
-                            object_type = "virtual_network"
+                        object_type = split[2]
+                        object_type = convert_obj_type_to_db(object_type)
 
                         if object_type == "imagelibrary" and split[0] == "vdcs":
                             data += (load_all_available(vdc_id=ent_id_parent, enttype=object_type))
@@ -2273,16 +2289,16 @@ class OutputManager(object):  # TODO Format json
         return [json.dumps({"API": {"Version": "2"}}, sort_keys=True, indent=4, separators=(',', ': '))]
 
     def no_post_data(self):
-        return ['{"Error": "Missing/incorrect post data submitted"}']
+        return [json.dumps({"Error": "Missing/incorrect post data submitted"}, sort_keys=True, indent=4, separators=(',', ': '))]
 
     def auth_failed(self):
-        return ['{"Unauthorized": "Authentication failed"}']
+        return [json.dumps({"Unauthorized": "Authentication failed"}, sort_keys=True, indent=4, separators=(',', ': '))]
 
     def auth_success(self, tokenResp):
-        return [tokenResp]
+        return [json.dumps(json.loads(tokenResp), sort_keys=True, indent=4, separators=(',', ': '))]
 
     def no_auth_token(self):
-        return ['{"Error": "No auth-token present"}']
+        return [json.dumps({"Error": "No auth-token present"}, sort_keys=True, indent=4, separators=(',', ': '))]
 
     def api_response(self, token, api_response):
         # return ["TOKEN VALID: " + token + "\nAPI RESPONSE:\n" + api_response]
@@ -2305,7 +2321,7 @@ class OutputManager(object):  # TODO Format json
             json.dumps({"Token": {"ID": token, "Status": "Invalid"}}, sort_keys=True, indent=4, separators=(',', ': '))]
 
     def wrong_api_version(self):
-        return ['{"Error": "Malformed/Unsupported API Version"}']
+        return [json.dumps({"Error": "Malformed/Unsupported API Version"}, sort_keys=True, indent=4, separators=(',', ': '))]
 
 
 def serve(env, start_response):

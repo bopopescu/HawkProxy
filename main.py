@@ -1175,7 +1175,7 @@ def delete_entity(details, slice_row_lower):
 
 
 def convert_obj_cont_name(obj_type):
-    if obj_type == "subnets":
+    if obj_type == "switches":
         obj_cont_name = "Subnet"
     elif obj_type == "nats":
         obj_cont_name = "Nat"
@@ -1229,7 +1229,7 @@ def convert_obj_cont_name(obj_type):
 
 
 def convert_obj_type_to_db(obj_type):
-    if obj_type == "subnets":
+    if obj_type == "switches":
         obj_type = "switch_network_service"
     elif obj_type == "nats":
         obj_type = "nat_network_service"
@@ -2019,8 +2019,8 @@ def format_details(details):
         if "subnets" in r.viewkeys():
             if r["subnets"]["total"] > 0:
                 subnets = r["subnets"]["elements"]
-                snets = add_elements(subnets, "subnet")
-                dicto.update({"subnets": snets})
+                snets = add_elements(subnets, "switch")
+                dicto.update({"switches": snets})
 
                 # dicto.update(r)
     else:
@@ -2054,7 +2054,7 @@ def request_api(addr, userData, reqm, post_data):
     print "API REQUEST: " + addr + " " + post_data + " " + str(reqm) + " " + aclRole
 
     split = addr[1:].split('/')
-    specific_action_addresses = ["subnets", "nats", "firewalls", "load-balancers", "routers",
+    specific_action_addresses = ["switches", "nats", "firewalls", "load-balancers", "routers",
                                  "vpns", "monitors", "compute-services", "server-farms", "servers",
                                  "containers", "volumes", "security-groups", "security-rules",
                                  "acl-groups", "acl-rules", "load-balancer-groups", "load-balancer-services",

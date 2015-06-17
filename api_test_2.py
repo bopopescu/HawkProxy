@@ -4,7 +4,7 @@ import requests
 import ujson as json
 import time
 
-admin_token = "fd01bd1ad68847d1bed4b3127376a9cc"
+admin_token = "mytoken"
 osa_token = "255f300cc33646e7afed8c60bb8462d3"
 dsa_token = "efac710ad3b646e28412d922d0a66263"
 vdcuser_token = "e5bcd0fd498045ea9859dce16e2c37c6"

@@ -1010,6 +1010,7 @@ def generate_options(obj_type, obj_uuid, data, vdc_details, action="create", chi
         # elif obj_type == "lbs-group":
         # elif obj_type == "lbs_service":
         # elif obj_type == "vpn_group":
+        # elif obj_type == "vpn_connection": #TODO ALL OF THESE
         # elif obj_type == "ipsecvpn_network_service":
         elif obj_type == "vdc":
             do_ssh_keys_conversion_to_db(options, data)
@@ -1270,15 +1271,19 @@ def convert_obj_type_to_db(obj_type):
     elif obj_type == "vpn-groups":
         obj_type = "vpn_group"
     elif obj_type == "ipsec-tunnels":
-        obj_type = "ipsecvpn_network_service"
+        obj_type = "vpn_connection"
     elif obj_type == "external-network-services":
         obj_type = "externalnetwork"  # LOL Confusing
     elif obj_type == "compute-services":
         obj_type = "compute_network_service"  # LOL Confusing
     elif obj_type == "virtual-networks":
         obj_type = "virtual_network"
-    elif obj_type == "vdcs" or obj_type == "departments":
+    elif obj_type == "vdcs":
         obj_type = "vdc"
+    elif obj_type == "departments":
+        obj_type = "department"
+    elif obj_type == "organizations":
+        obj_type = "organization"
     else:
         return "ERROR: Invalid entity type desired"
     return obj_type
@@ -1556,7 +1561,6 @@ def special_process(action_type, split, reqm, acls, user_data, post_data):
             obj_type = "vdcs"
             if len(split) == 3:
                 obj_uuid = split[1]
-                obj_type = split[0]
         elif len(split) > 0:  # ASSUME UUID IS PRESENT UNDER split[0]
             obj_uuid = split[0]
             obj_type = split[1]
@@ -1629,7 +1633,7 @@ def add_elements(things, ent_type):
     return dicto
 
 
-def add_interfaces(things, addresses=None):
+def add_interfaces(things, dbid, addresses=None):
     dicto = {"elements": []}
     if things is None:
         return dicto
@@ -1639,6 +1643,30 @@ def add_interfaces(things, addresses=None):
         addrs = {}
         onedic = {}
         int_name = thing["name"]
+
+        vdc_row = get_parent_details(get_entity_from_id(dbid)["id"])
+        # row = cloudDB.get_row_dict("tblEntities", {"Name": int_name, "ParentEntityId": vdc_row["id"]})
+        # int_row = cloudDB.execute_db("SELECT * FROM tblServicesInterfaces WHERE BeginServiceEntityId=%s OR EndServiceEntityId=%s" % (row["id"], row["id"]))
+        # print int_row[0]
+        # if int_row is not None:
+        #     int_ent_row = cloudDB.get_row_dict("tblEntities", {"id": int_row[0]["tblEntities"]})
+        #     if int_ent_row is not None:
+        #         onedic.update({"uuid": int_ent_row["UniqueId"]})
+
+        #res = rest.get_rest(UA + thing["uri"])
+        # dnsname = res["dns_name"]
+        # if len(dnsname) > 0:
+        #     dnsname = dnsname.split(".")
+        #     end = dnsname[0]
+        #     start = dnsname[-1]
+        #     vdc_row = get_parent_details(get_entity_from_id(dbid)["id"])
+        #     start_row = cloudDB.get_row_dict("tblEntities", {"Name": start, "ParentEntityId": vdc_row["id"]})
+        #     end_row = cloudDB.get_row_dict("tblEntities", {"Name": end, "ParentEntityId": vdc_row["id"]})
+        #     int_row = cloudDB.get_row_dict("tblServicesInterfaces", {"BeginServiceEntityId": start_row["id"], "EndServiceEntityId": end_row["id"]})
+        #     if int_row is not None:
+        #         int_ent_row = cloudDB.get_row_dict("tblEntities", {"id": int_row["tblEntities"]})
+        #         if int_ent_row is not None:
+        #             onedic.update({"uuid": int_ent_row["UniqueId"]})
 
         if addresses is not None:
             for address in addresses:
@@ -1675,14 +1703,14 @@ def load_details_from_cfd(details):
         return d
 
 
-def do_interface_addition(dicto, r):
+def do_interface_addition(dicto, dbid, r):
     if "interfaces" in r.viewkeys():
         interfaces = r["interfaces"]
         if "addresses" in r.viewkeys():
             addresses = r["addresses"]
         else:
             addresses = None
-        ints = add_interfaces(interfaces, addresses)
+        ints = add_interfaces(interfaces, dbid, addresses)
         dicto.update({"interfaces": ints})
 
 
@@ -1713,7 +1741,7 @@ def format_details(details):
         # return dicto
     # dicto.update({"Name": details["name"], "Description": details["description"]})
     # return {details["entitytype"]: dicto}
-    do_interface_addition(dicto, r)
+    do_interface_addition(dicto, details["id"], r)
 
     if details["entitytype"] == "organization":
         depts = add_elements(load_owned(details["id"], "department"), "department")
@@ -1979,6 +2007,14 @@ def format_details(details):
         dicto.update(r)
         if "uri" in dicto.viewkeys():
             dicto.pop("uri")
+    elif details["entitytype"] == "vpn_group":
+        ch = load_owned(details["id"], "vpn_connection")
+        chils = add_elements(ch, "vpn_connection")
+        dicto.update({"vpn_tunnels": chils})
+    elif details["entitytype"] == "vpn_connection":
+        dicto.update(r)
+        if "uri" in dicto.viewkeys():
+            dicto.pop("uri")
     elif details["entitytype"] == "lbs_group":
         #dicto.update(r)
         child_lbss = load_owned(details["id"], "lbs_service")
@@ -1987,6 +2023,16 @@ def format_details(details):
     elif details["entitytype"] == "lbs_service":
         dicto.update(r)
         if "uri" in dicto.viewkeys():
+            dicto.pop("uri")
+    elif details["entitytype"] == "imagelibrary":
+        child_imgs = load_owned(details["id"], "image")
+        imgs = add_elements(child_imgs, "image")
+        dicto.update({"libraryimages": imgs})
+        if "created_by" in r.viewkeys():
+            dicto.update({"created_by": r["created_by"]})
+    elif details["entitytype"] == "image":
+        dicto.update(r)
+        if "uri" in r.viewkeys():
             dicto.pop("uri")
     elif details["entitytype"] == "vdc":
         for key, val in r.iteritems():
@@ -2115,14 +2161,11 @@ def request_api(addr, userData, reqm, post_data):
                 if len(split[1]) == 36:
                     details = load_ent_details(split[1])
                     if len(split) < 3:  # details about one thing like departments/uuid
-                        if details["EntityType"] not in convert_obj_type_to_db(split[0]):
-                            if not (details["EntityType"] == "externalnetwork" and split[
-                                0] == "external-networks"):
-                                # makes sure you cant ask dept details and give vdc uuid.
-                                print details["EntityType"]
-                                print convert_obj_type_to_db(split[0])
-                                # TODO Fix this
-                                #return False
+                        if details["EntityType"] not in convert_obj_type_to_db(split[0]): #fails for departments
+                            # makes sure you cant ask dept details and give vdc uuid.
+                            print details["EntityType"]
+                            print convert_obj_type_to_db(split[0])
+                            return False
                         return format_details(get_entity(details))
                         # return get_dict_details(details)
 

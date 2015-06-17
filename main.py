@@ -1284,6 +1284,8 @@ def convert_obj_type_to_db(obj_type):
         obj_type = "department"
     elif obj_type == "organizations":
         obj_type = "organization"
+    elif obj_type == "service-ports":
+        obj_type = "service_port"
     else:
         return "ERROR: Invalid entity type desired"
     return obj_type
@@ -1613,6 +1615,8 @@ def add_elements(things, ent_type):
             for key, val in thing.iteritems():
                 if key != "uri":
                     onedic.update({key: str(val)})
+        if "AttachedSortSequenceId" in thing.viewkeys():
+            onedic.update({"attached_sequence_order": thing["AttachedSortSequenceId"]})
         if "name" in thing.viewkeys():
             onedic.update({"name": thing["name"]})
         elif "Name" in thing.viewkeys():
@@ -1623,6 +1627,7 @@ def add_elements(things, ent_type):
             onedic.update({"uuid": thing["UniqueId"]})
         elif "uuid" in thing.viewkeys():
             onedic.update({"uuid": thing["uuid"]})
+
         #TODO add type
         if len(onedic) > 0:
             dicto["elements"].append(onedic)
@@ -1632,8 +1637,7 @@ def add_elements(things, ent_type):
     dicto.update({"total": len(things)})
     return dicto
 
-
-def add_interfaces(things, dbid, addresses=None):
+def add_service_ports(things, dbid, addresses=None):
     dicto = {"elements": []}
     if things is None:
         return dicto
@@ -1642,36 +1646,20 @@ def add_interfaces(things, dbid, addresses=None):
     for thing in things:
         addrs = {}
         onedic = {}
-        int_name = thing["name"]
-
-        vdc_row = get_parent_details(get_entity_from_id(dbid)["id"])
-        # row = cloudDB.get_row_dict("tblEntities", {"Name": int_name, "ParentEntityId": vdc_row["id"]})
-        # int_row = cloudDB.execute_db("SELECT * FROM tblServicesInterfaces WHERE BeginServiceEntityId=%s OR EndServiceEntityId=%s" % (row["id"], row["id"]))
-        # print int_row[0]
-        # if int_row is not None:
-        #     int_ent_row = cloudDB.get_row_dict("tblEntities", {"id": int_row[0]["tblEntities"]})
-        #     if int_ent_row is not None:
-        #         onedic.update({"uuid": int_ent_row["UniqueId"]})
-
-        #res = rest.get_rest(UA + thing["uri"])
-        # dnsname = res["dns_name"]
-        # if len(dnsname) > 0:
-        #     dnsname = dnsname.split(".")
-        #     end = dnsname[0]
-        #     start = dnsname[-1]
-        #     vdc_row = get_parent_details(get_entity_from_id(dbid)["id"])
-        #     start_row = cloudDB.get_row_dict("tblEntities", {"Name": start, "ParentEntityId": vdc_row["id"]})
-        #     end_row = cloudDB.get_row_dict("tblEntities", {"Name": end, "ParentEntityId": vdc_row["id"]})
-        #     int_row = cloudDB.get_row_dict("tblServicesInterfaces", {"BeginServiceEntityId": start_row["id"], "EndServiceEntityId": end_row["id"]})
-        #     if int_row is not None:
-        #         int_ent_row = cloudDB.get_row_dict("tblEntities", {"id": int_row["tblEntities"]})
-        #         if int_ent_row is not None:
-        #             onedic.update({"uuid": int_ent_row["UniqueId"]})
+        dest_name = thing["name"]
+        # vdc_row = get_parent_details(get_entity_from_id(dbid)["id"])
+        # dest_row = cloudDB.get_row_dict("tblEntities", {"Name": dest_name, "ParentEntityId": vdc_row["id"]})
+        # print dbid
+        servicesport_row = cloudDB.get_row_dict("tblEntities", {"Name": dest_name, "ParentEntityId": dbid})
+        if servicesport_row is not None:
+            port_ent_row = cloudDB.get_row_dict("tblEntities", {"id": servicesport_row["id"]})
+            if port_ent_row is not None:
+                onedic.update({"uuid": port_ent_row["UniqueId"]})
 
         if addresses is not None:
             for address in addresses:
-                net_name = address["network"]  # TODO is network name the right thing here
-                if net_name == int_name:
+                net_name = address["network"]
+                if net_name == dest_name:
                     addrs.update(address)
                     break
             onedic.update({
@@ -1683,10 +1671,65 @@ def add_interfaces(things, dbid, addresses=None):
 
         dicto["elements"].append(onedic)
     dicto.update({
-        "type": "interface",
+        "type": "service_port",
         "total": len(things)
     })
     return dicto
+
+# def add_interfaces(things, dbid, addresses=None):
+#     dicto = {"elements": []}
+#     if things is None:
+#         return dicto
+#     if len(things) == 0:
+#         return dicto
+#     for thing in things:
+#         addrs = {}
+#         onedic = {}
+#         int_name = thing["name"]
+#
+#         #vdc_row = get_parent_details(get_entity_from_id(dbid)["id"])
+#         # row = cloudDB.get_row_dict("tblEntities", {"Name": int_name, "ParentEntityId": vdc_row["id"]})
+#         # int_row = cloudDB.execute_db("SELECT * FROM tblServicesInterfaces WHERE BeginServiceEntityId=%s OR EndServiceEntityId=%s" % (row["id"], row["id"]))
+#         # print int_row[0]
+#         # if int_row is not None:
+#         #     int_ent_row = cloudDB.get_row_dict("tblEntities", {"id": int_row[0]["tblEntities"]})
+#         #     if int_ent_row is not None:
+#         #         onedic.update({"uuid": int_ent_row["UniqueId"]})
+#
+#         #res = rest.get_rest(UA + thing["uri"])
+#         # dnsname = res["dns_name"]
+#         # if len(dnsname) > 0:
+#         #     dnsname = dnsname.split(".")
+#         #     end = dnsname[0]
+#         #     start = dnsname[-1]
+#         #     vdc_row = get_parent_details(get_entity_from_id(dbid)["id"])
+#         #     start_row = cloudDB.get_row_dict("tblEntities", {"Name": start, "ParentEntityId": vdc_row["id"]})
+#         #     end_row = cloudDB.get_row_dict("tblEntities", {"Name": end, "ParentEntityId": vdc_row["id"]})
+#         #     int_row = cloudDB.get_row_dict("tblServicesInterfaces", {"BeginServiceEntityId": start_row["id"], "EndServiceEntityId": end_row["id"]})
+#         #     if int_row is not None:
+#         #         int_ent_row = cloudDB.get_row_dict("tblEntities", {"id": int_row["tblEntities"]})
+#         #         if int_ent_row is not None:
+#         #             onedic.update({"uuid": int_ent_row["UniqueId"]})
+#
+#         if addresses is not None:
+#             for address in addresses:
+#                 net_name = address["network"]  # TODO is network name the right thing here
+#                 if net_name == int_name:
+#                     addrs.update(address)
+#                     break
+#             onedic.update({
+#                 "addresses": addrs
+#             })
+#         onedic.update(thing)
+#         if "uri" in onedic.viewkeys():
+#             onedic.pop("uri")
+#
+#         dicto["elements"].append(onedic)
+#     dicto.update({
+#         "type": "interface",
+#         "total": len(things)
+#     })
+#     return dicto
 
 
 def load_details_from_cfd(details):
@@ -1702,16 +1745,25 @@ def load_details_from_cfd(details):
         d.update(r)
         return d
 
-
-def do_interface_addition(dicto, dbid, r):
+def do_service_port_addition(dicto, dbid, r):
     if "interfaces" in r.viewkeys():
         interfaces = r["interfaces"]
         if "addresses" in r.viewkeys():
             addresses = r["addresses"]
         else:
             addresses = None
-        ints = add_interfaces(interfaces, dbid, addresses)
-        dicto.update({"interfaces": ints})
+        ports = add_service_ports(interfaces, dbid, addresses)
+        dicto.update({"service-ports": ports})
+
+# def do_interface_addition(dicto, dbid, r):
+#     if "interfaces" in r.viewkeys():
+#         interfaces = r["interfaces"]
+#         if "addresses" in r.viewkeys():
+#             addresses = r["addresses"]
+#         else:
+#             addresses = None
+#         ints = add_interfaces(interfaces, dbid, addresses)
+#         dicto.update({"interfaces": ints})
 
 
 def format_details(details):
@@ -1733,15 +1785,17 @@ def format_details(details):
         })
     r = load_details_from_cfd(details)
     print "RES: " + str(r)
-    if not r["successful"]:
-        return {"Error": "Entity not found in the CFD"}
-        # cloudDB.update_db("UPDATE tblEntities SET EntityStatus='Ready' WHERE id='%s'" % details["id"])
-        # for item in dict_keys_to_lower(get_entity(details["entitytype"], details["uniqueid"], details)).iteritems():
-        #         dicto.update({str(item[0]): str(item[1])})
-        # return dicto
-    # dicto.update({"Name": details["name"], "Description": details["description"]})
-    # return {details["entitytype"]: dicto}
-    do_interface_addition(dicto, details["id"], r)
+    if details["entitytype"] != "service_port":
+        if not r["successful"]:
+            return {"Error": "Entity not found in the CFD"}
+            # cloudDB.update_db("UPDATE tblEntities SET EntityStatus='Ready' WHERE id='%s'" % details["id"])
+            # for item in dict_keys_to_lower(get_entity(details["entitytype"], details["uniqueid"], details)).iteritems():
+            #         dicto.update({str(item[0]): str(item[1])})
+            # return dicto
+        # dicto.update({"Name": details["name"], "Description": details["description"]})
+        # return {details["entitytype"]: dicto}
+        else:
+            do_service_port_addition(dicto, details["id"], r)
 
     if details["entitytype"] == "organization":
         depts = add_elements(load_owned(details["id"], "department"), "department")
@@ -2034,6 +2088,26 @@ def format_details(details):
         dicto.update(r)
         if "uri" in r.viewkeys():
             dicto.pop("uri")
+    elif details["entitytype"] == "service_port":
+        if "destinationserviceentityid" in details.viewkeys():
+            dest_ent_row = cloudDB.get_row_dict("tblEntities", {"id": details["destinationserviceentityid"]})
+            dicto.update({"destination-service":
+                {
+                    "name": dest_ent_row["Name"],
+                    "uuid": dest_ent_row["UniqueId"],
+                    "type": dest_ent_row["EntityType"]
+                }
+            })
+        #TODO ALL OTHER GROUPS TOO
+        attached_sec_groups = cloudDB.execute_db("SELECT * FROM tblAttachedEntities WHERE AttachedEntityType='security_group' AND tblEntities='%s'" % details["id"])
+        a_sec_groups = []
+        for one in attached_sec_groups:
+            ent_row = cloudDB.get_row_dict("tblEntities", {"id": one["AttachedEntityId"]})
+            ent_row.update({"AttachedSortSequenceId": one["AttachedSortSequenceId"]})
+            a_sec_groups.append(ent_row)
+        sec_groups = add_elements(a_sec_groups, "security_group")
+        dicto.update({"security-groups": sec_groups})
+        #dicto.update(r)
     elif details["entitytype"] == "vdc":
         for key, val in r.iteritems():
             if not isinstance(val, dict) and not isinstance(val, list):
@@ -2104,7 +2178,8 @@ def request_api(addr, userData, reqm, post_data):
                                  "vpns", "monitors", "compute-services", "server-farms", "servers",
                                  "containers", "volumes", "security-groups", "security-rules",
                                  "acl-groups", "acl-rules", "load-balancer-groups", "load-balancer-services",
-                                 "vpn-groups", "ipsec-tunnels", "interfaces", "external-network-services"]
+                                 "vpn-groups", "ipsec-tunnels", "interfaces", "external-network-services",
+                                 "service-ports"]
     duplicate_specific_action_addresses = ["external-networks", "virtual-networks", "image-libraries"]
     action_entities = ["vdcs", "nats", "external-networks", "firewalls", "load-balancers", "routers", "vpns",
                        "monitors", "compute-services", "server-farms", "servers", "containers", "volumes"]

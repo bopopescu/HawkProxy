@@ -721,15 +721,15 @@ def get_department_consumption(db, dbid, compute_enabled=True, storage_enabled=T
     return consumption
 
 
-def update_consumption(master, child):  # add to masters records from child records.
+def update_consumption(main, child):  # add to mains records from child records.
     for key in child:
-        if key in master:
+        if key in main:
             if isinstance(child[key], dict):
-                update_consumption(master[key], child[key])
+                update_consumption(main[key], child[key])
             else:
-                master[key] += child[key]
+                main[key] += child[key]
         else:
-            master[key] = child[key]
+            main[key] = child[key]
 
 
 def get_vdc_consumption(db, dbid, compute_enabled=True,

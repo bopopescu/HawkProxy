@@ -1635,7 +1635,7 @@ def clone_entity(db, to_dbid, from_dbid, entitytype, update_clonedfrom=True):
         if ent["clonedfromentityid"] == 0:
             ent["clonedfromentityid"] = ent["id"]
 
-        master_id = ent["id"]
+        main_id = ent["id"]
         ent["parententityid"] = to_dbid
 
         ent.pop("id", None)
@@ -1663,7 +1663,7 @@ def clone_entity(db, to_dbid, from_dbid, entitytype, update_clonedfrom=True):
             cloud_utils.insert_db(db, "tblKeyValuePairs", {"tblEntities": clone_id,
                                                            "thekey": kv["thekey"], "thevalue": kv["thevalue"]})
 
-        user_data = db.get_row_dict("tblUserData", {"tblEntities": master_id}, order="ORDER BY id LIMIT 1")
+        user_data = db.get_row_dict("tblUserData", {"tblEntities": main_id}, order="ORDER BY id LIMIT 1")
         if user_data:
             cloud_utils.update_or_insert(db, "tblUserData", {"tblEntities": clone_id,
                                                              "user_data": user_data["User_Data"]},
@@ -1672,7 +1672,7 @@ def clone_entity(db, to_dbid, from_dbid, entitytype, update_clonedfrom=True):
         current_index = 0
         while True:
             row = cloud_utils.lower_key(
-                db.get_row("tblSSHPublicKeys", "tblEntities = '%s' AND id > '%s'" % (master_id, current_index),
+                db.get_row("tblSSHPublicKeys", "tblEntities = '%s' AND id > '%s'" % (main_id, current_index),
                            order="ORDER BY id LIMIT 1"))
             if row:
                 current_index = row['id']
@@ -1682,7 +1682,7 @@ def clone_entity(db, to_dbid, from_dbid, entitytype, update_clonedfrom=True):
                 break
 
         if entitytype in entity_constants.profile_group_child:
-            clone_entity(db, clone_id, master_id, entity_constants.profile_group_child[entitytype], update_clonedfrom)
+            clone_entity(db, clone_id, main_id, entity_constants.profile_group_child[entitytype], update_clonedfrom)
 
 
 def unclone_entity(db, to_dbid, from_dbid, entitytype):
@@ -2745,15 +2745,15 @@ def validate_resources(db, vdc_dbid, vdc_row, resources, reserve=False):
     return return_status
 
 
-def add_resources(master, item, LOG=LOG):
+def add_resources(main, item, LOG=LOG):
     for key in item:
-        if key in master:
+        if key in main:
             if isinstance(item[key], dict):
-                add_resources(master[key], item[key])
+                add_resources(main[key], item[key])
             else:
-                master[key] += item[key]
+                main[key] += item[key]
         else:
-            master[key] = item[key]
+            main[key] = item[key]
 
 
 def negate_resources(resources):

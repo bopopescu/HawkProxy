@@ -571,11 +571,11 @@ def _volume(db, dbid, row, keys, **kwargs):
         if "options" in kwargs and kwargs["options"]:
             j.update(_copy_kv(kwargs["options"], volume_command))
 
-            if "mastered" in kwargs["options"]:
+            if "mained" in kwargs["options"]:
                 if "create_from" in kwargs["options"] and kwargs["options"]["create_from"] == "snapshot":
                     j.update({"command": "create_volume",
                               "create_from_type": "snapshot",
-                              "create_from": get_snapshot_volume_container_dict(db, kwargs["options"]["mastered"])})
+                              "create_from": get_snapshot_volume_container_dict(db, kwargs["options"]["mained"])})
 
         if "voltype" in j:
             j["volume_type"] = j["voltype"]
@@ -1191,16 +1191,16 @@ def _image(db, dbid, row, keys, **kwargs):
         if "command" in kwargs["options"]:
             j.update({"command": kwargs["options"]["command"]})
 
-        if "mastered" in kwargs["options"]:
+        if "mained" in kwargs["options"]:
             if "create_from" in kwargs["options"] and kwargs["options"]["create_from"] == "volume":
                 j.update({"command": "create_image",
                           "create_from_type": "volume",
-                          "create_from": get_volume_container_dict(db, kwargs["options"]["mastered"])})
+                          "create_from": get_volume_container_dict(db, kwargs["options"]["mained"])})
 
             elif "create_from" in kwargs["options"] and kwargs["options"]["create_from"] == "server":
                 j.update({"command": "create_image",
                           "create_from_type": "server",
-                          "create_from": get_server_serverfarm_dict(db, kwargs["options"]["mastered"])})
+                          "create_from": get_server_serverfarm_dict(db, kwargs["options"]["mained"])})
     j.update(_copy_kv(row, keys))
     return j, None
 
